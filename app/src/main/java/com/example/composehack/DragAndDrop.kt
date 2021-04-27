@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.consumeAllChanges
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,7 +30,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntSize.Companion
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
 import kotlin.math.roundToInt
 import kotlin.reflect.KClass
@@ -42,6 +45,13 @@ fun HackDragScreen() {
     modifier = Modifier.fillMaxSize()
   ) {
     Column {
+      Box(
+        modifier = Modifier
+          .size(100.dp)
+          .background(color = Color.Gray)
+      ) {
+        Text("non draggable")
+      }
       Draggable(
         dragDataProducer = { "${System.currentTimeMillis()}" }
       ) { dragged ->
@@ -59,62 +69,87 @@ fun HackDragScreen() {
         Box(
           Modifier
             .size(100.dp)
-            .background(color = if (receiving) Color.Green else Color.Blue)
-        ) {}
-        Text(targetValue)
-      }
-    }
-  }
-}
-
-@Composable
-fun DragContainer(
-  modifier: Modifier,
-  content: @Composable () -> Unit) {
-  val isDragging = remember { mutableStateOf(false) }
-  val dragPosition = remember { mutableStateOf(Offset.Zero) }
-  val dragOffset = remember { mutableStateOf(Offset.Zero) }
-  val sourcePosition = remember { mutableStateOf(Offset.Zero) }
-  CompositionLocalProvider(
-    LocalDragIsDragging provides isDragging,
-    LocalSourcePosition provides sourcePosition,
-    LocalDragPosition provides dragPosition,
-    LocalDragOffset provides dragOffset,
-  ) {
-    Box(modifier = modifier.background(Color.Yellow)) {
-      content()
-      if (isDragging.value) {
-        var dragSize by remember { mutableStateOf(IntSize.Zero) }
-        Box(
-          modifier = Modifier
-            .offset {
-              IntOffset(
-                (dragPosition.value.x - sourcePosition.value.x + dragOffset.value.x - (dragSize.width / 2)).roundToInt(),
-                (dragPosition.value.y - sourcePosition.value.y + dragOffset.value.y - (dragSize.height / 2)).roundToInt(),
-              )
-            }
-            .zIndex(4f)
-            .scale(.5f)
-            .border(width = 2.dp, color = Color.Black)
-            .alpha(.5f)
-            .onGloballyPositioned {
-              dragSize = it.size
-            }
+            .background(color = if (receiving) Color.Green else Color.Cyan)
         ) {
-          LocalDraggedComposable.current.value?.invoke()
+          Text(targetValue)
         }
       }
     }
   }
 }
 
-val LocalDragIsDragging = compositionLocalOf { mutableStateOf(false) }
-val LocalDragPosition = compositionLocalOf { mutableStateOf(Offset.Zero) }
-val LocalSourcePosition = compositionLocalOf { mutableStateOf(Offset.Zero) }
-val LocalDragOffset = compositionLocalOf { mutableStateOf(Offset.Zero) }
-val LocalDraggedComposable = compositionLocalOf { mutableStateOf<(@Composable () -> Unit)?>( null) }
-val LocalDraggedData = compositionLocalOf { mutableStateOf<Any?>(null) }
-val LocalDragReceiver = compositionLocalOf { mutableStateOf<((Any) -> Unit)?>(null) }
+internal class DragInfo {
+  var isDragging: Boolean by mutableStateOf(false)
+  var dragPosition by mutableStateOf(Offset.Zero)
+  var dragOffset by mutableStateOf(Offset.Zero)
+  var sourcePosition by mutableStateOf(Offset.Zero)
+  var draggableComposable by mutableStateOf<(@Composable () -> Unit)?>(null)
+  var draggedData by mutableStateOf<Any?>(null)
+  var draggedDataReceiver by mutableStateOf<((Any) -> Unit)?>(null)
+  var receivingAt by mutableStateOf<Rect?>(null)
+}
+
+internal val LocalDragInfo = compositionLocalOf { DragInfo() }
+
+/**
+ * Convenience method to be able to write something like:
+ *
+ *     Modifier
+ *       .background(...)
+ *       .takeIf(a < b) {
+ *          // part of the chain applied only if a < b
+ *          border(...)
+ *          .etcetc(...)
+ *       }
+ *       .alpha(...)
+ */
+inline fun Modifier.takeIf(condition: Boolean, block: Modifier.() -> Modifier): Modifier =
+  if (condition) block() else this
+
+fun Offset.toIntOffset() = IntOffset(x.roundToInt(), y.roundToInt())
+
+operator fun IntOffset.minus(size: IntSize) = IntOffset(x - size.width, y - size.height)
+
+@Composable
+fun DragContainer(
+  modifier: Modifier,
+  content: @Composable () -> Unit) {
+
+  val state = remember { DragInfo() }
+  CompositionLocalProvider(
+    LocalDragInfo provides state
+  ) {
+    var myWindowPosition by remember { mutableStateOf(Offset.Zero) }
+    Box(modifier = modifier
+      .background(Color.Yellow)
+      .onGloballyPositioned {
+        myWindowPosition = it.localToWindow(Offset.Zero)
+      }) {
+      content()
+      if (state.isDragging) {
+        var dragSize by remember { mutableStateOf(IntSize.Zero) }
+        Box(
+          modifier = Modifier
+            .offset {
+              val offset = (state.dragPosition - myWindowPosition + state.dragOffset)
+              offset.toIntOffset() - dragSize / 2
+            }
+            .zIndex(4f)
+            .scale(.5f)
+            .takeIf(dragSize != IntSize.Zero)  {
+              border(width = 2.dp, color = Color.Black)
+            }
+            .alpha(if (dragSize == IntSize.Zero) 0f else .5f)
+            .onGloballyPositioned {
+              dragSize = it.size
+            }
+        ) {
+          state.draggableComposable?.invoke()
+        }
+      }
+    }
+  }
+}
 
 @Composable
 fun <T : Any> Draggable(
@@ -122,36 +157,41 @@ fun <T : Any> Draggable(
   content: @Composable (isBeingDragged: Boolean) -> Unit
 ) {
   var iAmBeingDragged by remember { mutableStateOf(false) }
-  val sourcePositionState = LocalSourcePosition.current
-  val dragPositionState = LocalDragPosition.current
-  val isDraggingState = LocalDragIsDragging.current
-  val dragOffsetState = LocalDragOffset.current
-  val draggedComposableState = LocalDraggedComposable.current
-  val dragDraggedDataState = LocalDraggedData.current
-  val dragDataReceiver = LocalDragReceiver.current
+  var mySourcePosition by remember { mutableStateOf(Offset.Zero) }
+  val dragInfo = LocalDragInfo.current
   Box(
     Modifier
       .onGloballyPositioned {
-        sourcePositionState.value = it.localToWindow(Offset.Zero)
+        mySourcePosition = it.localToWindow(Offset.Zero)
       }
       .pointerInput(Unit) {
         detectDragGesturesAfterLongPress(
           onDragStart = {
-            isDraggingState.value = true
-            dragPositionState.value = sourcePositionState.value + it
-            draggedComposableState.value = { content(false) }
-            dragDraggedDataState.value = dragDataProducer()
+            dragInfo.isDragging = true
+            dragInfo.sourcePosition = mySourcePosition
+            dragInfo.dragPosition = mySourcePosition + it
+            dragInfo.draggableComposable = { content(false) }
+            dragInfo.draggedData = dragDataProducer()
             iAmBeingDragged = true
           },
           onDragEnd = {
-            dragOffsetState.value = Offset.Zero
-            isDraggingState.value = false
-            dragDataReceiver.value?.invoke(dragDraggedDataState.value!!)
+            dragInfo.receivingAt?.let { receivingAt ->
+              if (receivingAt.contains(dragInfo.dragPosition + dragInfo.dragOffset)) {
+                dragInfo.draggedDataReceiver?.invoke(dragInfo.draggedData!!)
+              }
+            }
+            dragInfo.isDragging = false
+            dragInfo.dragOffset = Offset.Zero
+            iAmBeingDragged = false
+          },
+          onDragCancel = {
+            dragInfo.dragOffset = Offset.Zero
+            dragInfo.isDragging = false
             iAmBeingDragged = false
           },
           onDrag = { change, dragAmount ->
             change.consumeAllChanges()
-            dragOffsetState.value += Offset(dragAmount.x, dragAmount.y)
+            dragInfo.dragOffset += Offset(dragAmount.x, dragAmount.y)
           }
         )
       }
@@ -162,7 +202,7 @@ fun <T : Any> Draggable(
 
 @Composable
 inline fun <reified T : Any> DragReceiver(
-  noinline onReceive: (T) -> Unit,
+  noinline onReceive: (draggedData: T) -> Unit,
   noinline content: @Composable (receiving: Boolean) -> Unit
 ) {
   DragReceiver(onReceive = onReceive, klazz = T::class, content = content)
@@ -175,23 +215,31 @@ internal fun <T : Any> DragReceiver(
   klazz: KClass<T>,
   content: @Composable (receiving: Boolean) -> Unit
 ) {
-  var receiving by remember { mutableStateOf(false) }
-  val dragPositionState = LocalDragPosition.current
-  val dragOffsetState = LocalDragOffset.current
-  val accepts = klazz.java.isInstance(LocalDraggedData.current.value)
-  Box(
-    modifier = Modifier
-      .onGloballyPositioned { layoutCoordinates ->
-        receiving = accepts &&
-          layoutCoordinates
-          .boundsInWindow()
-          .contains(dragPositionState.value + dragOffsetState.value)
+  var receivingAt by remember { mutableStateOf<Rect?>(null) }
+  val dragInfo = LocalDragInfo.current
+  val accepts = klazz.java.isInstance(dragInfo.draggedData)
+  if (!accepts) {
+    // If we don't accept this drag type, don't set up anything (and don't refresh until
+    // that data changes
+    content(false)
+  } else {
+    // If we accept that type then yes, check if it changes position
+    val dragPosition = dragInfo.dragPosition
+    val dragOffsetState = dragInfo.dragOffset
+    Box(
+      modifier = Modifier
+        .onGloballyPositioned { layoutCoordinates ->
+          receivingAt =
+            layoutCoordinates
+            .boundsInWindow()
+              .let { if (it.contains(dragPosition + dragOffsetState)) it else null }
+        }
+    ) {
+      if(receivingAt != null) {
+        dragInfo.receivingAt = receivingAt
+        dragInfo.draggedDataReceiver = { onReceive(klazz.java.cast(it)!!) }
       }
-  ) {
-    val isReceiving = receiving
-    if (isReceiving) {
-      LocalDragReceiver.current.value = { onReceive(klazz.java.cast(it)!!) }
+      content(receivingAt != null)
     }
-    content(isReceiving)
   }
 }
