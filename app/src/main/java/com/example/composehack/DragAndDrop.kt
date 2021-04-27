@@ -1,15 +1,10 @@
 package com.example.composehack
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -27,57 +22,15 @@ import androidx.compose.ui.input.pointer.consumeAllChanges
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.IntSize.Companion
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
-import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
-@Preview
-@Composable
-fun HackDragScreen() {
-  var targetValue by remember { mutableStateOf("(drop here)") }
-  DragContainer(
-    modifier = Modifier.fillMaxSize()
-  ) {
-    Column {
-      Box(
-        modifier = Modifier
-          .size(100.dp)
-          .background(color = Color.Gray)
-      ) {
-        Text("non draggable")
-      }
-      Draggable(
-        dragDataProducer = { "${System.currentTimeMillis()}" }
-      ) { dragged ->
-        Box(
-          modifier = Modifier
-            .size(100.dp)
-            .background(color = if (dragged) Color.White else Color.Red)
-        ) {
-          Text("Drag me")
-        }
-      }
-      DragReceiver<String>(
-        onReceive = { targetValue = it }
-      ) { receiving ->
-        Box(
-          Modifier
-            .size(100.dp)
-            .background(color = if (receiving) Color.Green else Color.Cyan)
-        ) {
-          Text(targetValue)
-        }
-      }
-    }
-  }
-}
-
+/**
+ * Internal structure maintained by a [DragContainer] and accessible through [LocalDragInfo].
+ * [Draggable] and [DragReceiver] will use it and update it.
+ */
 internal class DragInfo {
   var isDragging: Boolean by mutableStateOf(false)
   var dragPosition by mutableStateOf(Offset.Zero)
@@ -90,25 +43,6 @@ internal class DragInfo {
 }
 
 internal val LocalDragInfo = compositionLocalOf { DragInfo() }
-
-/**
- * Convenience method to be able to write something like:
- *
- *     Modifier
- *       .background(...)
- *       .takeIf(a < b) {
- *          // part of the chain applied only if a < b
- *          border(...)
- *          .etcetc(...)
- *       }
- *       .alpha(...)
- */
-inline fun Modifier.takeIf(condition: Boolean, block: Modifier.() -> Modifier): Modifier =
-  if (condition) block() else this
-
-fun Offset.toIntOffset() = IntOffset(x.roundToInt(), y.roundToInt())
-
-operator fun IntOffset.minus(size: IntSize) = IntOffset(x - size.width, y - size.height)
 
 @Composable
 fun DragContainer(
@@ -231,7 +165,7 @@ internal fun <T : Any> DragReceiver(
         .onGloballyPositioned { layoutCoordinates ->
           receivingAt =
             layoutCoordinates
-            .boundsInWindow()
+              .boundsInWindow()
               .let { if (it.contains(dragPosition + dragOffsetState)) it else null }
         }
     ) {
