@@ -27,61 +27,7 @@ fun BuildScreen() {
       factor = 0.2f,
       left = {
         Column {
-          Draggable<Element>(
-            modifier = Modifier.fillMaxWidth(),
-            dragDataProducer = {
-              Horizontal(listOf(), 0, 0)
-            }) { state ->
-            Box(modifier = Modifier
-              .background(if (state == NORMAL_DRAGGING) Color.Gray else Color.LightGray)
-            ) {
-              Text(text = "Horizontal")
-            }
-          }
-          Draggable<Element>(
-            modifier = Modifier.fillMaxWidth(),
-            dragDataProducer = {
-              Vertical(listOf(), 0, 0)
-            }) { state ->
-            Box(modifier = Modifier
-              .background(if (state == NORMAL_DRAGGING) Color.Gray else Color.LightGray)
-            ) {
-              Text(text = "Vertical")
-            }
-          }
-          Draggable<Element>(
-            modifier = Modifier.fillMaxWidth(),
-            dragDataProducer = {
-            BoxItem("Magenta", Color.Magenta)
-          }) { state ->
-            Box(modifier = Modifier
-              .background(if (state == NORMAL_DRAGGING) Color.Gray else Color.Magenta)
-            ) {
-              Text(text = "Magenta")
-            }
-          }
-          Draggable<Element>(
-            modifier = Modifier.fillMaxWidth(),
-            dragDataProducer = {
-            BoxItem("Yellow", Color.Yellow)
-          }) { state ->
-            Box(modifier = Modifier
-              .background(if (state == NORMAL_DRAGGING) Color.Gray else Color.Yellow)
-            ) {
-              Text(text = "Yellow")
-            }
-          }
-          Draggable<Element>(
-            modifier = Modifier.fillMaxWidth(),
-            dragDataProducer = {
-            BoxItem("Green", Color.Green)
-          }) { state ->
-            Box(modifier = Modifier
-              .background(if (state == NORMAL_DRAGGING) Color.Gray else Color.Green)
-            ) {
-              Text(text = "Green")
-            }
-          }
+          elementsMenu.forEach { RenderMenuItem(it) }
         }
       },
       right = {
@@ -126,3 +72,30 @@ val initialElement = Vertical(
   extendFrom = 1,
   extendTo = 1
 )
+
+private val elementsMenu = listOf<MenuItem>(
+  MenuItem("Horizontal", Color.LightGray) { Horizontal(listOf(), 0, 0) },
+  MenuItem("Vertical", Color.LightGray) { Vertical(listOf(), 0, 0) },
+  MenuItem("Magenta", Color.Magenta) { BoxItem("Magenta", Color.Magenta) },
+  MenuItem("Yellow", Color.Yellow) { BoxItem("Magenta", Color.Yellow) },
+  MenuItem("Green", Color.Magenta) { BoxItem("Green", Color.Green) }
+)
+
+private class MenuItem(
+  val text: String,
+  val color: Color,
+  val elementProducer: () -> Element
+)
+
+@Composable
+private fun RenderMenuItem(menuItem: MenuItem) {
+  Draggable(
+    modifier = Modifier.fillMaxWidth(),
+    dragDataProducer = menuItem.elementProducer) { state ->
+    Box(modifier = Modifier
+      .background(if (state == NORMAL_DRAGGING) Color.Gray else menuItem.color)
+    ) {
+      Text(text = menuItem.text)
+    }
+  }
+}
