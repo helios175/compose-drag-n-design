@@ -232,13 +232,13 @@ abstract class Linear<ContainerScopeT> : Element {
       placeElement(index = index, extended = false)
     }
     // Center
+    placeHolder("T", index = extendFrom, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
     if (extendFrom == extendTo) {
       placeHolder("C", index = extendFrom, incrementExtendFrom = false, incrementExtendTo = true, extended = true)
     } else {
-      placeHolder("T", index = extendFrom, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
       placeElement(index = extendFrom, extended = true)
-      placeHolder("B", index = extendTo, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
     }
+    placeHolder("B", index = extendTo, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
     // Bottom
     for (index in extendTo until elements.size) {
       placeElement(index = index, extended = false)
