@@ -1,5 +1,6 @@
 package com.example.composehack
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -60,6 +61,8 @@ fun DragContainer(
         myWindowPosition = it.localToWindow(Offset.Zero)
       }) {
       content()
+      Log.d("TESTING123", "Dragging ${state.isDragging}")
+      Log.d("TESTING123", "Dragging ${state.dragPosition}")
       if (state.isDragging) {
         var dragSize by remember { mutableStateOf(IntSize.Zero) }
         Box(
