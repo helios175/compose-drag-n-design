@@ -24,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow.Ellipsis
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,7 +31,7 @@ import com.example.composehack.DraggableState.NORMAL_DRAGGING
 
 @Composable
 fun BuildScreen() {
-  var vertical: Element by remember { mutableStateOf(sampleVertical) }
+  var mainElement: Element by remember { mutableStateOf(sampleVertical) }
   DragContainer(modifier = Modifier.fillMaxSize()) {
     HorizontalSplit(
       factor = 0.2f,
@@ -47,6 +46,17 @@ fun BuildScreen() {
               .background(if (state == NORMAL_DRAGGING) Color.Gray else Color.LightGray)
             ) {
               Text(text = "Horizontal")
+            }
+          }
+          Draggable<Element>(
+            modifier = Modifier.fillMaxWidth(),
+            dragDataProducer = {
+              Vertical(listOf(), 0, 0)
+            }) { state ->
+            Box(modifier = Modifier
+              .background(if (state == NORMAL_DRAGGING) Color.Gray else Color.LightGray)
+            ) {
+              Text(text = "Vertical")
             }
           }
           Draggable<Element>(
@@ -91,10 +101,10 @@ fun BuildScreen() {
             .background(Color.White)
             .padding(20.dp)
         ) {
-          Log.d("TESTING123", "$vertical")
-          vertical.generate(
+          Log.d("TESTING123", "$mainElement")
+          mainElement.generate(
             modifier = Modifier,
-            onTransform = { vertical = it }
+            onTransform = { mainElement = it }
           )
         }
       }
