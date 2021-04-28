@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -225,6 +226,18 @@ data class Vertical(
 
   override fun Modifier.myDirectionMinSize() = height(IntrinsicSize.Min)
   override fun Modifier.fillOtherDirection() = fillMaxWidth()
+}
+
+data class Horizontal(
+  override val elements: List<Element>,
+  override val extendFrom: Int,
+  override val extendTo: Int
+) : Linear() {
+  override fun copyMySelf(elements: List<Element>, extendFrom: Int, extendTo: Int) =
+    Horizontal(elements, extendFrom, extendTo)
+
+  override fun Modifier.myDirectionMinSize() = width(IntrinsicSize.Min)
+  override fun Modifier.fillOtherDirection() = fillMaxHeight()
 }
 
 val sampleVertical = Vertical(
