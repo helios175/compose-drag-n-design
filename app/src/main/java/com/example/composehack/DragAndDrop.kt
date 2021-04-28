@@ -1,6 +1,6 @@
 package com.example.composehack
 
-import android.util.Log
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -26,6 +26,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.example.composehack.DraggableState.DRAGGABLE
+import com.example.composehack.DraggableState.NORMAL
+import com.example.composehack.DraggableState.NORMAL_DRAGGING
 import kotlin.reflect.KClass
 
 /**
@@ -55,14 +58,12 @@ fun DragContainer(
     LocalDragInfo provides state
   ) {
     var myWindowPosition by remember { mutableStateOf(Offset.Zero) }
-    Box(modifier = modifier
-      .background(Color.Yellow)
+    Box(
+      modifier = modifier
       .onGloballyPositioned {
         myWindowPosition = it.localToWindow(Offset.Zero)
       }) {
       content()
-      Log.d("TESTING123", "Dragging ${state.isDragging}")
-      Log.d("TESTING123", "Dragging ${state.dragPosition}")
       if (state.isDragging) {
         var dragSize by remember { mutableStateOf(IntSize.Zero) }
         Box(
@@ -72,9 +73,9 @@ fun DragContainer(
               offset.toIntOffset() - dragSize / 2
             }
             .zIndex(4f)
-            .scale(.5f)
+            //.scale(.5f)
             .takeIf(dragSize != IntSize.Zero)  {
-              border(width = 2.dp, color = Color.Black)
+              border(width = 2.dp, color = Color.Gray)
             }
             .alpha(if (dragSize == IntSize.Zero) 0f else .5f)
             .onGloballyPositioned {
@@ -88,16 +89,24 @@ fun DragContainer(
   }
 }
 
+enum class DraggableState {
+  NORMAL,
+  NORMAL_DRAGGING,
+  DRAGGABLE
+}
+
 @Composable
 fun <T : Any> Draggable(
+  modifier: Modifier,
   dragDataProducer: () -> T,
-  content: @Composable (isBeingDragged: Boolean) -> Unit
+  content: @Composable (state: DraggableState) -> Unit
 ) {
   var iAmBeingDragged by remember { mutableStateOf(false) }
   var mySourcePosition by remember { mutableStateOf(Offset.Zero) }
   val dragInfo = LocalDragInfo.current
   Box(
-    Modifier
+    propagateMinConstraints = true, // we stretch content if we are stretched
+    modifier = modifier
       .onGloballyPositioned {
         mySourcePosition = it.localToWindow(Offset.Zero)
       }
@@ -107,7 +116,7 @@ fun <T : Any> Draggable(
             dragInfo.isDragging = true
             dragInfo.sourcePosition = mySourcePosition
             dragInfo.dragPosition = mySourcePosition + it
-            dragInfo.draggableComposable = { content(false) }
+            dragInfo.draggableComposable = { content(DRAGGABLE) }
             dragInfo.draggedData = dragDataProducer()
             iAmBeingDragged = true
           },
@@ -133,21 +142,23 @@ fun <T : Any> Draggable(
         )
       }
   ) {
-    content(iAmBeingDragged)
+    content(if (iAmBeingDragged) NORMAL_DRAGGING else NORMAL)
   }
 }
 
 @Composable
 inline fun <reified T : Any> DragReceiver(
+  modifier: Modifier,
   noinline onReceive: (draggedData: T) -> Unit,
   noinline content: @Composable (receiving: Boolean) -> Unit
 ) {
-  DragReceiver(onReceive = onReceive, klazz = T::class, content = content)
+  DragReceiver(modifier = modifier, onReceive = onReceive, klazz = T::class, content = content)
 }
 
 @Composable
 @PublishedApi
 internal fun <T : Any> DragReceiver(
+  modifier: Modifier,
   onReceive: (T) -> Unit,
   klazz: KClass<T>,
   content: @Composable (receiving: Boolean) -> Unit
@@ -155,28 +166,24 @@ internal fun <T : Any> DragReceiver(
   var receivingAt by remember { mutableStateOf<Rect?>(null) }
   val dragInfo = LocalDragInfo.current
   val accepts = klazz.java.isInstance(dragInfo.draggedData)
-  if (!accepts) {
-    // If we don't accept this drag type, don't set up anything (and don't refresh until
-    // that data changes
-    content(false)
-  } else {
-    // If we accept that type then yes, check if it changes position
-    val dragPosition = dragInfo.dragPosition
-    val dragOffsetState = dragInfo.dragOffset
-    Box(
-      modifier = Modifier
-        .onGloballyPositioned { layoutCoordinates ->
+  val dragPosition = dragInfo.dragPosition
+  val dragOffsetState = dragInfo.dragOffset
+  Box(
+    propagateMinConstraints = true, // we stretch content if we are stretched
+    modifier = modifier
+      .takeIf(accepts) {
+        onGloballyPositioned { layoutCoordinates ->
           receivingAt =
             layoutCoordinates
               .boundsInWindow()
               .let { if (it.contains(dragPosition + dragOffsetState)) it else null }
         }
-    ) {
-      if(receivingAt != null) {
-        dragInfo.receivingAt = receivingAt
-        dragInfo.draggedDataReceiver = { onReceive(klazz.java.cast(it)!!) }
       }
-      content(receivingAt != null)
+  ) {
+    if(receivingAt != null) {
+      dragInfo.receivingAt = receivingAt
+      dragInfo.draggedDataReceiver = { onReceive(klazz.java.cast(it)!!) }
     }
+    content(receivingAt != null)
   }
 }

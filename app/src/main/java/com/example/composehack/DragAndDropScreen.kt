@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.composehack.DraggableState.NORMAL_DRAGGING
 
 /**
  * Sample screen for dragging.
@@ -35,17 +36,19 @@ fun DragAndDropScreen() {
         Text("non draggable")
       }
       Draggable(
+        modifier = Modifier,
         dragDataProducer = { "${System.currentTimeMillis()}" }
-      ) { dragged ->
+      ) { state ->
         Box(
           modifier = Modifier
             .size(100.dp)
-            .background(color = if (dragged) Color.White else Color.Red)
+            .background(color = if (state == NORMAL_DRAGGING) Color.White else Color.Red)
         ) {
           Text("Drag me")
         }
       }
       DragReceiver<String>(
+        modifier = Modifier,
         onReceive = { targetValue = it }
       ) { receiving ->
         Box(
