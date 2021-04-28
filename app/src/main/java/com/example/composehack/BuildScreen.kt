@@ -1,5 +1,6 @@
 package com.example.composehack
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow.Ellipsis
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +38,17 @@ fun BuildScreen() {
       factor = 0.2f,
       left = {
         Column {
+          Draggable<Element>(
+            modifier = Modifier.fillMaxWidth(),
+            dragDataProducer = {
+              Horizontal(listOf(), 0, 0)
+            }) { state ->
+            Box(modifier = Modifier
+              .background(if (state == NORMAL_DRAGGING) Color.Gray else Color.LightGray)
+            ) {
+              Text(text = "Horizontal")
+            }
+          }
           Draggable<Element>(
             modifier = Modifier.fillMaxWidth(),
             dragDataProducer = {
@@ -77,6 +91,7 @@ fun BuildScreen() {
             .background(Color.White)
             .padding(20.dp)
         ) {
+          Log.d("TESTING123", "$vertical")
           vertical.generate(
             modifier = Modifier,
             onTransform = { vertical = it }
@@ -130,14 +145,16 @@ class PlaceHolder(
 @Composable
 fun PreviewPlaceHolder() {
   Box(
-    modifier = Modifier.fillMaxSize().background(Color.White),
+    modifier = Modifier
+      .fillMaxSize()
+      .background(Color.White),
     contentAlignment = Alignment.Center
   ) {
     PlaceHolder("top").generate(modifier = Modifier) {}
   }
 }
 
-abstract class Linear() : Element {
+abstract class Linear<ContainerScopeT> : Element {
   abstract val elements: List<Element>
   abstract val extendFrom: Int
   abstract val extendTo: Int
@@ -146,22 +163,23 @@ abstract class Linear() : Element {
     elements: List<Element>,
     extendFrom: Int,
     extendTo: Int
-  ): Linear
+  ): Linear<ContainerScopeT>
 
   abstract fun Modifier.myDirectionMinSize(): Modifier
   abstract fun Modifier.fillOtherDirection(): Modifier
+  abstract fun Modifier.weight1(scope: ContainerScopeT): Modifier
+  @Composable
+  abstract fun createContainer(modifier: Modifier, content: @Composable ContainerScopeT.() -> Unit)
 
   @Composable
   override fun generate(modifier: Modifier, onTransform: (Element) -> Unit) {
-    Column(modifier = modifier
-      .then(modifier)
-    ) {
+    createContainer(modifier) {
       generate(modifier = Modifier.fillOtherDirection(), onTransform = onTransform)
     }
   }
 
   @Composable
-  fun ColumnScope.generate(modifier: Modifier, onTransform: (Element) -> Unit) {
+  fun ContainerScopeT.generate(modifier: Modifier, onTransform: (Element) -> Unit) {
 
     @Composable
     fun placeHolder(
@@ -172,7 +190,7 @@ abstract class Linear() : Element {
       incrementExtendTo: Boolean
     ) {
       val childModifier = modifier
-        .takeIf(extended) { weight(1f) }
+        .takeIf(extended) { weight1(this@generate) }
         .takeIf(!extended) { myDirectionMinSize() }
       PlaceHolder(text)
         .generate(modifier = childModifier) { newElement ->
@@ -189,28 +207,32 @@ abstract class Linear() : Element {
     @Composable
     fun placeElement(index: Int, extended: Boolean) {
       val childModifier = modifier
-        .takeIf(extended) { weight(1f) }
+        .takeIf(extended) { weight1(this@generate) }
         .takeIf(!extended) { myDirectionMinSize() }
-      elements[index].generate(modifier = childModifier, onTransform = {})
+      elements[index].generate(modifier = childModifier, onTransform = { newElement ->
+        val newElements = elements.toMutableList().apply { this[index] = newElement }
+        val newMe = copyMySelf(newElements, extendFrom, extendTo)
+        /* my */ onTransform(newMe)
+      })
     }
 
     // Top
     for (index in 0 until extendFrom) {
-      placeHolder("top", index = index, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
+      placeHolder("T", index = index, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
       placeElement(index = index, extended = false)
     }
     // Center
     if (extendFrom == extendTo) {
-      placeHolder("center", index = extendFrom, incrementExtendFrom = false, incrementExtendTo = true, extended = true)
+      placeHolder("C", index = extendFrom, incrementExtendFrom = false, incrementExtendTo = true, extended = true)
     } else {
-      placeHolder("top", index = extendFrom, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
+      placeHolder("T", index = extendFrom, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
       placeElement(index = extendFrom, extended = true)
-      placeHolder("bottom", index = extendTo, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
+      placeHolder("B", index = extendTo, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
     }
     // Bottom
     for (index in extendTo until elements.size) {
       placeElement(index = index, extended = false)
-      placeHolder("bottom", index = index + 1, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
+      placeHolder("B", index = index + 1, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
     }
   }
 
@@ -220,24 +242,36 @@ data class Vertical(
   override val elements: List<Element>,
   override val extendFrom: Int,
   override val extendTo: Int
-) : Linear() {
+) : Linear<ColumnScope>() {
   override fun copyMySelf(elements: List<Element>, extendFrom: Int, extendTo: Int) =
     Vertical(elements, extendFrom, extendTo)
 
+  @Composable
+  override fun createContainer(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier = modifier, content = content)
+  }
+
   override fun Modifier.myDirectionMinSize() = height(IntrinsicSize.Min)
   override fun Modifier.fillOtherDirection() = fillMaxWidth()
+  override fun Modifier.weight1(scope: ColumnScope) = with(scope) { weight(1f) }
 }
 
 data class Horizontal(
   override val elements: List<Element>,
   override val extendFrom: Int,
   override val extendTo: Int
-) : Linear() {
+) : Linear<RowScope>() {
   override fun copyMySelf(elements: List<Element>, extendFrom: Int, extendTo: Int) =
     Horizontal(elements, extendFrom, extendTo)
 
+  @Composable
+  override fun createContainer(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
+    Row(modifier = modifier, content = content)
+  }
+
   override fun Modifier.myDirectionMinSize() = width(IntrinsicSize.Min)
   override fun Modifier.fillOtherDirection() = fillMaxHeight()
+  override fun Modifier.weight1(scope: RowScope) = with(scope) { weight(1f) }
 }
 
 val sampleVertical = Vertical(
