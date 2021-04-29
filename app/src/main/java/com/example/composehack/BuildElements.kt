@@ -45,6 +45,8 @@ fun PlaceHolder(
   text: String,
   onTransform: (Element) -> Unit
 ) {
+  if (!LocalSelectionInfo.current.showHelpers) return
+
   DragReceiver(modifier, onReceive = onTransform) { receiving ->
     Box(
       modifier = Modifier
@@ -205,10 +207,14 @@ fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
   val selectionInfo = LocalSelectionInfo.current
   element.generate(
     modifier = modifier
-      .clickable {
-        selectionInfo.selectedElement = element
-        selectionInfo.onRemove = onRemove
+      .takeIf(selectionInfo.showHelpers) {
+        clickable {
+          selectionInfo.selectedElement = element
+          selectionInfo.onRemove = onRemove
+        }
       }
-      .takeIf(selectionInfo.selectedElement == element) { background(Color.Red).padding(3.dp) }
-  )
+      .takeIf(selectionInfo.selectedElement == element) {
+        background(Color.Red).padding(3.dp)
+      }
+    )
 }

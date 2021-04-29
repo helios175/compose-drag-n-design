@@ -36,6 +36,7 @@ val LocalSelectionInfo = compositionLocalOf<SelectionInfo> { error("LocalSelecti
 class SelectionInfo {
   var selectedElement: Element? by mutableStateOf(null)
   var onRemove: () -> Unit by mutableStateOf({})
+  var showHelpers: Boolean by mutableStateOf(true)
 }
 
 @Composable
@@ -45,6 +46,19 @@ fun BuildScreen() {
   CompositionLocalProvider(LocalSelectionInfo provides selectionInfo) {
     DragContainer(modifier = Modifier.fillMaxSize()) {
       Column {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.End
+        ) {
+          Button(
+            onClick = {
+              selectionInfo.showHelpers = !selectionInfo.showHelpers
+              selectionInfo.selectedElement = null
+            }
+          ) {
+            Text("Helpers ${if (selectionInfo.showHelpers) "ON" else "OFF"}")
+          }
+        }
         selectionInfo.selectedElement?.let { element ->
           Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(modifier = Modifier.weight(1f), text = "[${element.name}] properties:")
