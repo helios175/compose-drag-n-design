@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.material.Text
+import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
@@ -26,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 interface Element {
+
+  val name: String
 
   @Composable
   fun properties(modifier: Modifier) = Unit
@@ -66,9 +71,9 @@ fun PreviewPlaceHolder() {
 }
 
 abstract class Linear<ContainerScopeT> : Element {
-  val elements = mutableStateOf(listOf<Element>())
-  val extendFrom = mutableStateOf(0)
-  val extendTo = mutableStateOf(0)
+  var elements by mutableStateOf(listOf<Element>())
+  var extendFrom by mutableStateOf(0)
+  var extendTo by mutableStateOf(0)
 
   abstract fun Modifier.myDirectionMinSize(): Modifier
   abstract fun Modifier.fillOtherDirection(): Modifier
@@ -98,9 +103,9 @@ abstract class Linear<ContainerScopeT> : Element {
         .takeIf(extended) { weight1(this@generate) }
         .takeIf(!extended) { myDirectionMinSize() }
       PlaceHolder(modifier = childModifier, text = text) { newElement ->
-        elements.value = elements.value.toMutableList().apply { add(index, newElement) }
-        if (incrementExtendFrom) { extendFrom.value++ }
-        if (incrementExtendTo) { extendTo.value++ }
+        elements = elements.toMutableList().apply { add(index, newElement) }
+        if (incrementExtendFrom) { extendFrom++ }
+        if (incrementExtendTo) { extendTo++ }
       }
     }
 
@@ -109,24 +114,30 @@ abstract class Linear<ContainerScopeT> : Element {
       val childModifier = modifier
         .takeIf(extended) { weight1(this@generate) }
         .takeIf(!extended) { myDirectionMinSize() }
-      PlacedElement(childModifier, elements.value[index])
+      val top = index < extendFrom
+      val center = index in extendFrom until extendTo
+      PlacedElement(childModifier, elements[index], onRemove = {
+        elements = elements.toMutableList().apply { removeAt(index) }
+        if (top) extendFrom--
+        if (top || center) extendTo--
+      })
     }
 
     // Top
-    for (index in 0 until extendFrom.value) {
+    for (index in 0 until extendFrom) {
       placeHolder("T", index = index, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
       placeElement(index = index, extended = false)
     }
     // Center
-    placeHolder("T", index = extendFrom.value, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
-    if (extendFrom.value == extendTo.value) {
-      placeHolder("C", index = extendFrom.value, incrementExtendFrom = false, incrementExtendTo = true, extended = true)
+    placeHolder("T", index = extendFrom, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
+    if (extendFrom == extendTo) {
+      placeHolder("C", index = extendFrom, incrementExtendFrom = false, incrementExtendTo = true, extended = true)
     } else {
-      placeElement(index = extendFrom.value, extended = true)
+      placeElement(index = extendFrom, extended = true)
     }
-    placeHolder("B", index = extendTo.value, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
+    placeHolder("B", index = extendTo, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
     // Bottom
-    for (index in extendTo.value until elements.value.size) {
+    for (index in extendTo until elements.size) {
       placeElement(index = index, extended = false)
       placeHolder("B", index = index + 1, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
     }
@@ -135,6 +146,8 @@ abstract class Linear<ContainerScopeT> : Element {
 }
 
 class Vertical : Linear<ColumnScope>() {
+
+  override val name get() = "Vertical"
 
   @Composable
   override fun createContainer(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
@@ -147,6 +160,8 @@ class Vertical : Linear<ColumnScope>() {
 }
 
 class Horizontal: Linear<RowScope>() {
+
+  override val name get() = "Horizontal"
 
   @Composable
   override fun createContainer(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
@@ -164,16 +179,14 @@ class BoxItem(
   val textColor: Color = Color.Black
 ) : Element {
 
-  var text = mutableStateOf(text)
+  override val name: String get() = "BoxItem"
+  var text by mutableStateOf(text)
 
   @Composable
   override fun properties(modifier: Modifier) {
-    Text(
-      modifier = modifier.clickable {
-          text.value = "Otra cosa mariposa"
-      },
-      text = "Properties for BoxItem"
-    )
+    Column(modifier = modifier) {
+      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
+    }
   }
 
   @Composable
@@ -182,17 +195,20 @@ class BoxItem(
       modifier = modifier.background(color),
       propagateMinConstraints = true // we stretch content if we are stretched
     ) {
-      Text(text.value, fontSize = 20.sp, color = textColor)
+      Text(text, fontSize = 20.sp, color = textColor)
     }
   }
 }
 
 @Composable
-fun PlacedElement(modifier: Modifier, element: Element) {
+fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
   val selectionInfo = LocalSelectionInfo.current
   element.generate(
     modifier = modifier
-      .clickable { selectionInfo.selectedElement = element }
+      .clickable {
+        selectionInfo.selectedElement = element
+        selectionInfo.onRemove = onRemove
+      }
       .takeIf(selectionInfo.selectedElement == element) { background(Color.Red).padding(3.dp) }
   )
 }
