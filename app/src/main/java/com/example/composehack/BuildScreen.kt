@@ -161,7 +161,8 @@ private val elementsMenu = listOf(
   MenuEntry("Magenta", Color.Magenta) { BoxItem("Magenta", Color.Magenta) },
   MenuEntry("Yellow", Color.Yellow) { BoxItem("Yellow", Color.Yellow) },
   MenuEntry("Green", Color.Green) { BoxItem("Green", Color.Green) },
-  MenuEntry("Button", Color.Cyan) { ButtonItem("Button") }
+  MenuEntry("Button", Color.Cyan) { ButtonItem("Button") },
+  MenuEntry("TextField", Color.LightGray) { TextFieldItem("Text") }
 )
 
 /**

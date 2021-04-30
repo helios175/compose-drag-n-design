@@ -1,6 +1,7 @@
 package com.example.composehack
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Button
 import androidx.compose.runtime.getValue
@@ -19,8 +21,11 @@ import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.isFocused
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
@@ -59,7 +64,7 @@ class BoxItem(
       modifier = $modifier.background(${color.toCodeString()}}),
       propagateMinConstraints = true
     ) {
-      Text(\"$text\", fontSize = 20.sp, color = ${color.toCodeString()})
+      Text("$text", fontSize = 20.sp, color = ${color.toCodeString()})
     }
     """.trimIndent()
     )
@@ -88,7 +93,7 @@ class ButtonItem(initialText: String) : Element {
   override fun printTo(modifier: String, output: CodeOutput) {
     output.println("""
       Button(modifier = $modifier) {
-        Text(text = \"$text\")
+        Text(text = "$text")
       }
       """.trimIndent()
     )
@@ -99,6 +104,42 @@ class ButtonItem(initialText: String) : Element {
     Column(modifier = modifier) {
       TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
     }
+  }
+}
+
+/**
+ * [Element] that produces a Material [TextField].
+ */
+class TextFieldItem(initialText: String) : Element {
+
+  var text: String by mutableStateOf(initialText)
+
+  override val name get() = "TextField"
+
+  @Composable
+  override fun Properties(modifier: Modifier) {
+    Column(modifier = modifier) {
+      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
+    }
+  }
+
+  @Composable
+  override fun Generate(modifier: Modifier, onClickHelper: () -> Unit) {
+    TextField(modifier = modifier
+      // Use the "onFocus" as a proxy for "I'm clicked"
+      .onFocusChanged { if (it.isFocused) onClickHelper() },
+      value = text,
+      onValueChange = { },
+      // For some reason, if it's not readOnly.
+      // there's a recomposition crash when clicking helpers on/off.
+      readOnly = true
+    )
+  }
+
+  override fun printTo(modifier: String, output: CodeOutput) {
+    output.println("""
+      TextField(modifier = $modifier, value = "$text", onValueChange = {...})
+    """.trimIndent())
   }
 }
 
