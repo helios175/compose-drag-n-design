@@ -1,8 +1,6 @@
 package com.example.composehack
 
-import android.util.Log
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +48,18 @@ fun BuildScreen() {
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.End
         ) {
+          Button(
+            onClick = {
+              CodeOutput().apply {
+                mainElement.printTo("Modifier", this)
+              }
+                .toString()
+                .split('\n')
+                .forEach(::println)
+            }
+          ) {
+            Text("Print")
+          }
           Button(
             onClick = {
               selectionInfo.showHelpers = !selectionInfo.showHelpers

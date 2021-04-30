@@ -24,9 +24,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.lang.StringBuilder
 
 interface Element {
 
@@ -37,6 +39,35 @@ interface Element {
 
   @Composable
   fun generate(modifier: Modifier)
+
+  fun printTo(modifier: String, output: CodeOutput)
+}
+
+class CodeOutput {
+  private val sb = StringBuilder()
+  private var indent = 0
+
+  fun indent(block: () -> Unit) {
+    indent++
+    block()
+    indent--
+  }
+
+  private fun printIndent() {
+    repeat(indent) {
+      sb.append("  ")
+    }
+  }
+
+  fun println(text: String) {
+    text.split('\n').forEach {
+      printIndent()
+      sb.append(it)
+      sb.append('\n')
+    }
+  }
+
+  override fun toString() = sb.toString()
 }
 
 @Composable
@@ -80,6 +111,28 @@ abstract class Linear<ContainerScopeT> : Element {
   abstract fun Modifier.myDirectionMinSize(): Modifier
   abstract fun Modifier.fillOtherDirection(): Modifier
   abstract fun Modifier.weight1(scope: ContainerScopeT): Modifier
+  abstract fun codeForContainer(): String
+  abstract fun codeForFillOtherDirection(): String
+  abstract fun codeForMyDirectionMinSize(): String
+
+  override fun printTo(modifier: String, output: CodeOutput) {
+    val container = codeForContainer()
+    val fillOtherDirection = codeForFillOtherDirection()
+    val myDirectionMinSize = codeForMyDirectionMinSize()
+    val weight1 = "weight(1f)"
+    with (output) {
+      println("$container(Modifier.$fillOtherDirection) {")
+      indent {
+        elements.forEachIndexed { index, element ->
+          val extended = index in extendFrom until extendTo
+          val childModifier = "Modifier.${if (extended) weight1 else myDirectionMinSize}"
+          element.printTo(childModifier, this)
+        }
+      }
+      println("}")
+    }
+  }
+
   @Composable
   abstract fun createContainer(modifier: Modifier, content: @Composable ContainerScopeT.() -> Unit)
 
@@ -159,6 +212,9 @@ class Vertical : Linear<ColumnScope>() {
   override fun Modifier.myDirectionMinSize() = height(Min)
   override fun Modifier.fillOtherDirection() = fillMaxWidth()
   override fun Modifier.weight1(scope: ColumnScope) = with(scope) { weight(1f) }
+  override fun codeForContainer() = "Column"
+  override fun codeForFillOtherDirection() = "fillMaxWidth()"
+  override fun codeForMyDirectionMinSize() = "height(Min)"
 }
 
 class Horizontal: Linear<RowScope>() {
@@ -173,6 +229,9 @@ class Horizontal: Linear<RowScope>() {
   override fun Modifier.myDirectionMinSize() = width(Min)
   override fun Modifier.fillOtherDirection() = fillMaxHeight()
   override fun Modifier.weight1(scope: RowScope) = with(scope) { weight(1f) }
+  override fun codeForContainer() = "Row"
+  override fun codeForFillOtherDirection() = "fillMaxHeight()"
+  override fun codeForMyDirectionMinSize() = "width(Min)"
 }
 
 class BoxItem(
@@ -200,7 +259,21 @@ class BoxItem(
       Text(text, fontSize = 20.sp, color = textColor)
     }
   }
+
+  override fun printTo(modifier: String, output: CodeOutput) {
+    output.println("""
+    Box(
+      modifier = $modifier.background(${color.toCodeString()}}),
+      propagateMinConstraints = true
+    ) {
+      Text(\"$text\", fontSize = 20.sp, color = ${color.toCodeString()})
+    }
+    """.trimIndent()
+    )
+  }
 }
+
+private fun Color.toCodeString() = "Color(0x${toArgb().toUInt().toString(16)})"
 
 @Composable
 fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
