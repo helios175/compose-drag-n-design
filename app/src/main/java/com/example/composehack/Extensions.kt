@@ -14,7 +14,8 @@ import kotlin.math.roundToInt
  *       .takeIf(a < b) {
  *          // part of the chain applied only if a < b
  *          border(...)
- *          .etcetc(...)
+ *          .etc(...)
+ *          .etc(...)
  *       }
  *       .alpha(...)
  */

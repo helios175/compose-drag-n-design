@@ -273,9 +273,8 @@ fun PreviewPlaceHolder() {
 @Composable
 fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
   val selectionInfo = LocalSelectionInfo.current
-  val showingHelpers = selectionInfo.showHelpers
   val onClickHelper: () -> Unit
-  if (showingHelpers) {
+  if (selectionInfo.showHelpers) {
     onClickHelper = {
       selectionInfo.selectedElement = element
       selectionInfo.onRemove = onRemove
@@ -285,12 +284,14 @@ fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
   }
   element.Generate(
     modifier = modifier
-      .takeIf(showingHelpers) { clickable { onClickHelper() } }
+      // Some elements like the textfield might take issue with adding and removing clickable.
+      // So we always set it even if it does nothing.
+      .clickable { onClickHelper() }
       .takeIf(selectionInfo.selectedElement == element) {
         background(Color.Red).padding(3.dp)
       },
     onClickHelper = onClickHelper
-    )
+  )
 }
 
 /**

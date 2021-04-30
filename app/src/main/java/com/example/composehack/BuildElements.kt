@@ -126,10 +126,7 @@ class TextFieldItem(initialText: String) : Element {
       // Use the "onFocus" as a proxy for "I'm clicked"
       .onFocusChanged { if (it.isFocused) onClickHelper() },
       value = text,
-      onValueChange = { },
-      // For some reason, if it's not readOnly.
-      // there's a recomposition crash when clicking helpers on/off.
-      readOnly = true
+      onValueChange = { text = it },
     )
   }
 
