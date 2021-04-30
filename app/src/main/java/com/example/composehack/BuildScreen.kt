@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.composehack.DraggableState.NORMAL_DRAGGING
-import java.lang.StringBuilder
 
 /**
  * Provides the [SelectionInfo] instance for the [BuildScreen] composable.
