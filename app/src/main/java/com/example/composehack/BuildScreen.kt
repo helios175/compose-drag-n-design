@@ -1,5 +1,6 @@
 package com.example.composehack
 
+import android.app.backup.BackupAgentHelper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Button
 import androidx.compose.material.Text
+import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -123,22 +125,45 @@ fun HorizontalSplit(
   }
 }
 
+class ButtonItem(initialText: String) : Element {
+
+  var text by mutableStateOf(initialText)
+
+  override val name get() = "Button"
+
+  @Composable
+  override fun generate(modifier: Modifier, onClickHelper: () -> Unit) {
+    Button(modifier = modifier, onClick = onClickHelper) {
+      Text(text = text)
+    }
+  }
+
+  override fun printTo(modifier: String, output: CodeOutput) {
+    output.println("""
+      Button(modifier = $modifier) {
+        Text(text = \"$text\")
+      }
+      """.trimIndent()
+    )
+  }
+
+  @Composable
+  override fun properties(modifier: Modifier) {
+    Column(modifier = modifier) {
+      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
+    }
+  }
+}
+
 val initialElement = Vertical()
-//  elements = listOf(
-//    BoxItem("Item 1", Color.Red),
-//    BoxItem("item 2", Color.Green),
-//    BoxItem("Item 3", Color.Blue, textColor = Color.White),
-//  ),
-//  extendFrom = 1,
-//  extendTo = 1
-//)
 
 private val elementsMenu = listOf(
   MenuItem("Horizontal", Color.LightGray) { Horizontal() },
   MenuItem("Vertical", Color.LightGray) { Vertical() },
   MenuItem("Magenta", Color.Magenta) { BoxItem("Magenta", Color.Magenta) },
   MenuItem("Yellow", Color.Yellow) { BoxItem("Yellow", Color.Yellow) },
-  MenuItem("Green", Color.Green) { BoxItem("Green", Color.Green) }
+  MenuItem("Green", Color.Green) { BoxItem("Green", Color.Green) },
+  MenuItem("Button", Color.Cyan) { ButtonItem("Button") }
 )
 
 private class MenuItem(

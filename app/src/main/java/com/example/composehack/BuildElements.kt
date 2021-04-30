@@ -38,7 +38,13 @@ interface Element {
   fun properties(modifier: Modifier) = Unit
 
   @Composable
-  fun generate(modifier: Modifier)
+  fun generate(modifier: Modifier): Unit = error("Override one of both generate methods")
+
+  // Override this one if you need to reset the clickable for buttons and similars.
+  @Composable
+  fun generate(modifier: Modifier, onClickHelper: () -> Unit) =
+    generate(modifier = modifier)
+    
 
   fun printTo(modifier: String, output: CodeOutput)
 }
@@ -278,16 +284,22 @@ private fun Color.toCodeString() = "Color(0x${toArgb().toUInt().toString(16)})"
 @Composable
 fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
   val selectionInfo = LocalSelectionInfo.current
+  val showingHelpers = selectionInfo.showHelpers
+  val onClickHelper: () -> Unit
+  if (showingHelpers) {
+    onClickHelper = {
+      selectionInfo.selectedElement = element
+      selectionInfo.onRemove = onRemove
+    }
+  } else {
+    onClickHelper = {}
+  }
   element.generate(
     modifier = modifier
-      .takeIf(selectionInfo.showHelpers) {
-        clickable {
-          selectionInfo.selectedElement = element
-          selectionInfo.onRemove = onRemove
-        }
-      }
+      .takeIf(showingHelpers) { clickable { onClickHelper() } }
       .takeIf(selectionInfo.selectedElement == element) {
         background(Color.Red).padding(3.dp)
-      }
+      },
+    onClickHelper = onClickHelper
     )
 }
