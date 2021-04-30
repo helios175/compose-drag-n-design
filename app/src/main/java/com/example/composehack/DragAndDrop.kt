@@ -1,7 +1,5 @@
 package com.example.composehack
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
@@ -15,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -46,8 +43,20 @@ internal class DragInfo {
   var receivingAt by mutableStateOf<Rect?>(null)
 }
 
+/**
+ * Provided by a [DragContainer], this [DragInfo] will contain all state relevant to dragging.
+ */
 internal val LocalDragInfo = compositionLocalOf { DragInfo() }
 
+/**
+ * This container should be used in a screen that allows for dragging. The area covered by this
+ * [DragContainer] will be the area where the dragging can happen.
+ * This composable also sets up the common state needed for [Draggable] and [DragContainer] to
+ * communicated "dragged data".
+ *
+ * @see Draggable
+ * @see DragReceiver
+ */
 @Composable
 fun DragContainer(
   modifier: Modifier,
@@ -89,12 +98,28 @@ fun DragContainer(
   }
 }
 
+/**
+ * Tells which version of a [Draggable] is being generated.
+ */
 enum class DraggableState {
+  /** The draggable element in-place, not being dragged. */
   NORMAL,
+  /** The draggable element in-place, when being dragged. */
   NORMAL_DRAGGING,
+  /** The draggable element floating. */
   DRAGGABLE
 }
 
+/**
+ * Generates a dragabble component.
+ * There should be placed inside a [DragContainer] which will be the area where things can be
+ * dragged.
+ *
+ * @param modifier the usual modifier for the element. Constraints will be propagated to [content].
+ * @param dragDataProducer a lambda producing the data to be communicated to a [DragReceiver].
+ * @param content a composable for the draggable element. It will receive a [DraggableState]
+ * because this content will be used for the in-place UI and the floating UI as well.
+ */
 @Composable
 fun <T : Any> Draggable(
   modifier: Modifier,
@@ -146,6 +171,14 @@ fun <T : Any> Draggable(
   }
 }
 
+/**
+ * Wrapper for a composable that is able to receive a [Draggable] via drag and drop.
+ * @param T the type of data that this [DragReceiver] accepts. Other types will be ignored.
+ * @param modifier the modifier for the component. Constraints will be propagated to the [content].
+ * @param onReceive this method will be called when a draggedData is dropped on us.
+ * @param content the composable for the receiver component UI. It receives a boolean indicating
+ * if something is being dragged over or not (to for instance, highlight).
+ */
 @Composable
 inline fun <reified T : Any> DragReceiver(
   modifier: Modifier,

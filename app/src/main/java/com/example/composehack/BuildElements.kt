@@ -1,8 +1,6 @@
 package com.example.composehack
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -10,105 +8,105 @@ import androidx.compose.foundation.layout.IntrinsicSize.Min
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.Button
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.lang.StringBuilder
 
-interface Element {
-
-  val name: String
-
-  @Composable
-  fun properties(modifier: Modifier) = Unit
-
-  @Composable
-  fun generate(modifier: Modifier): Unit = error("Override one of both generate methods")
-
-  // Override this one if you need to reset the clickable for buttons and similars.
-  @Composable
-  fun generate(modifier: Modifier, onClickHelper: () -> Unit) =
-    generate(modifier = modifier)
-    
-
-  fun printTo(modifier: String, output: CodeOutput)
-}
-
-class CodeOutput {
-  private val sb = StringBuilder()
-  private var indent = 0
-
-  fun indent(block: () -> Unit) {
-    indent++
-    block()
-    indent--
-  }
-
-  private fun printIndent() {
-    repeat(indent) {
-      sb.append("  ")
-    }
-  }
-
-  fun println(text: String) {
-    text.split('\n').forEach {
-      printIndent()
-      sb.append(it)
-      sb.append('\n')
-    }
-  }
-
-  override fun toString() = sb.toString()
-}
-
-@Composable
-fun PlaceHolder(
-  modifier: Modifier,
+/**
+ * Sample [Element] for a box with color and text.
+ */
+class BoxItem(
   text: String,
-  onTransform: (Element) -> Unit
-) {
-  if (!LocalSelectionInfo.current.showHelpers) return
+  val color: Color,
+  val textColor: Color = Color.Black
+) : Element {
 
-  DragReceiver(modifier, onReceive = onTransform) { receiving ->
+  override val name: String get() = "BoxItem"
+  var text by mutableStateOf(text)
+
+  @Composable
+  override fun Properties(modifier: Modifier) {
+    Column(modifier = modifier) {
+      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
+    }
+  }
+
+  @Composable
+  override fun Generate(modifier: Modifier) {
     Box(
-      modifier = Modifier
-        .takeIf(receiving) { background(Color.Green) }
-        .border(2.dp, Color.LightGray)
-        .padding(horizontal = 6.dp, vertical = 2.dp)
+      modifier = modifier.background(color),
+      propagateMinConstraints = true // we stretch content if we are stretched
     ) {
-      Text(text, color = Color.LightGray)
+      Text(text, fontSize = 20.sp, color = textColor)
+    }
+  }
+
+  @ExperimentalUnsignedTypes
+  override fun printTo(modifier: String, output: CodeOutput) {
+    output.println("""
+    Box(
+      modifier = $modifier.background(${color.toCodeString()}}),
+      propagateMinConstraints = true
+    ) {
+      Text(\"$text\", fontSize = 20.sp, color = ${color.toCodeString()})
+    }
+    """.trimIndent()
+    )
+  }
+}
+
+@ExperimentalUnsignedTypes
+private fun Color.toCodeString() = "Color(0x${toArgb().toUInt().toString(16)})"
+
+/**
+ * [Element] that produces a Material [Button].
+ */
+class ButtonItem(initialText: String) : Element {
+
+  var text by mutableStateOf(initialText)
+
+  override val name get() = "Button"
+
+  @Composable
+  override fun Generate(modifier: Modifier, onClickHelper: () -> Unit) {
+    Button(modifier = modifier, onClick = onClickHelper) {
+      Text(text = text)
+    }
+  }
+
+  override fun printTo(modifier: String, output: CodeOutput) {
+    output.println("""
+      Button(modifier = $modifier) {
+        Text(text = \"$text\")
+      }
+      """.trimIndent()
+    )
+  }
+
+  @Composable
+  override fun Properties(modifier: Modifier) {
+    Column(modifier = modifier) {
+      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
     }
   }
 }
 
-@Preview
-@Composable
-fun PreviewPlaceHolder() {
-  Box(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Color.White),
-    contentAlignment = Alignment.Center
-  ) {
-    PlaceHolder(modifier = Modifier, "top") {}
-  }
-}
-
+/**
+ * Base class for both [Vertical] and [Horizontal] [elements][Element].
+ * The code to generate [Column] and [Row] is almost identical except for a few little pieces
+ * that are solved through abstracts methods implemented on each concrete class.
+ */
 abstract class Linear<ContainerScopeT> : Element {
   var elements by mutableStateOf(listOf<Element>())
   var extendFrom by mutableStateOf(0)
@@ -140,17 +138,17 @@ abstract class Linear<ContainerScopeT> : Element {
   }
 
   @Composable
-  abstract fun createContainer(modifier: Modifier, content: @Composable ContainerScopeT.() -> Unit)
+  abstract fun CreateContainer(modifier: Modifier, content: @Composable ContainerScopeT.() -> Unit)
 
   @Composable
-  override fun generate(modifier: Modifier) {
-    createContainer(modifier) {
-      generate(modifier = Modifier.fillOtherDirection())
+  override fun Generate(modifier: Modifier) {
+    CreateContainer(modifier) {
+      Generate(modifier = Modifier.fillOtherDirection())
     }
   }
 
   @Composable
-  fun ContainerScopeT.generate(modifier: Modifier) {
+  fun ContainerScopeT.Generate(modifier: Modifier) {
 
     @Composable
     fun placeHolder(
@@ -161,7 +159,7 @@ abstract class Linear<ContainerScopeT> : Element {
       incrementExtendTo: Boolean
     ) {
       val childModifier = modifier
-        .takeIf(extended) { weight1(this@generate) }
+        .takeIf(extended) { weight1(this@Generate) }
         .takeIf(!extended) { myDirectionMinSize() }
       PlaceHolder(modifier = childModifier, text = text) { newElement ->
         elements = elements.toMutableList().apply { add(index, newElement) }
@@ -173,7 +171,7 @@ abstract class Linear<ContainerScopeT> : Element {
     @Composable
     fun placeElement(index: Int, extended: Boolean) {
       val childModifier = modifier
-        .takeIf(extended) { weight1(this@generate) }
+        .takeIf(extended) { weight1(this@Generate) }
         .takeIf(!extended) { myDirectionMinSize() }
       val top = index < extendFrom
       val center = index in extendFrom until extendTo
@@ -206,12 +204,17 @@ abstract class Linear<ContainerScopeT> : Element {
 
 }
 
+/**
+ * [Element] that produces a [Column].
+ * See the [base class][Linear] for details on how its implemented.
+ * [Vertical] only provides the specifics for the vertical case.
+ */
 class Vertical : Linear<ColumnScope>() {
 
   override val name get() = "Vertical"
 
   @Composable
-  override fun createContainer(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+  override fun CreateContainer(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier = modifier, content = content)
   }
 
@@ -223,12 +226,17 @@ class Vertical : Linear<ColumnScope>() {
   override fun codeForMyDirectionMinSize() = "height(Min)"
 }
 
+/**
+ * [Element] that produces a [Row].
+ * See the [base class][Linear] for details on how its implemented.
+ * [Horizontal] only provides the specifics for the vertical case.
+ */
 class Horizontal: Linear<RowScope>() {
 
   override val name get() = "Horizontal"
 
   @Composable
-  override fun createContainer(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
+  override fun CreateContainer(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
     Row(modifier = modifier, content = content)
   }
 
@@ -238,68 +246,4 @@ class Horizontal: Linear<RowScope>() {
   override fun codeForContainer() = "Row"
   override fun codeForFillOtherDirection() = "fillMaxHeight()"
   override fun codeForMyDirectionMinSize() = "width(Min)"
-}
-
-class BoxItem(
-  text: String,
-  val color: Color,
-  val textColor: Color = Color.Black
-) : Element {
-
-  override val name: String get() = "BoxItem"
-  var text by mutableStateOf(text)
-
-  @Composable
-  override fun properties(modifier: Modifier) {
-    Column(modifier = modifier) {
-      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
-    }
-  }
-
-  @Composable
-  override fun generate(modifier: Modifier) {
-    Box(
-      modifier = modifier.background(color),
-      propagateMinConstraints = true // we stretch content if we are stretched
-    ) {
-      Text(text, fontSize = 20.sp, color = textColor)
-    }
-  }
-
-  override fun printTo(modifier: String, output: CodeOutput) {
-    output.println("""
-    Box(
-      modifier = $modifier.background(${color.toCodeString()}}),
-      propagateMinConstraints = true
-    ) {
-      Text(\"$text\", fontSize = 20.sp, color = ${color.toCodeString()})
-    }
-    """.trimIndent()
-    )
-  }
-}
-
-private fun Color.toCodeString() = "Color(0x${toArgb().toUInt().toString(16)})"
-
-@Composable
-fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
-  val selectionInfo = LocalSelectionInfo.current
-  val showingHelpers = selectionInfo.showHelpers
-  val onClickHelper: () -> Unit
-  if (showingHelpers) {
-    onClickHelper = {
-      selectionInfo.selectedElement = element
-      selectionInfo.onRemove = onRemove
-    }
-  } else {
-    onClickHelper = {}
-  }
-  element.generate(
-    modifier = modifier
-      .takeIf(showingHelpers) { clickable { onClickHelper() } }
-      .takeIf(selectionInfo.selectedElement == element) {
-        background(Color.Red).padding(3.dp)
-      },
-    onClickHelper = onClickHelper
-    )
 }
