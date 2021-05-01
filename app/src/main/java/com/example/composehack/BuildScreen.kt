@@ -63,9 +63,10 @@ class SelectionInfo {
  * It contains:
  * ```
  * [ properties for selected element ] [ helpers On/Off ] [ Remove selected ]
- * [ Components menu] [                   design space                     ]
+ * [ Components menu] [                   design space                      ]
  * ```
  */
+@Preview
 @Composable
 fun BuildScreen() {
   val mainElement: Element by remember { mutableStateOf(initialElement) }
@@ -274,7 +275,8 @@ fun PreviewPlaceHolder() {
 fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
   val selectionInfo = LocalSelectionInfo.current
   val onClickHelper: () -> Unit
-  if (selectionInfo.showHelpers) {
+  val showHelpers = selectionInfo.showHelpers
+  if (showHelpers) {
     onClickHelper = {
       selectionInfo.selectedElement = element
       selectionInfo.onRemove = onRemove
@@ -282,16 +284,21 @@ fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
   } else {
     onClickHelper = {}
   }
-  element.Generate(
+  // Some elements like the TextField might take issue with adding and removing clickable.
+  // So we do it in a wrapper box instead.
+  Box(
     modifier = modifier
-      // Some elements like the textfield might take issue with adding and removing clickable.
-      // So we always set it even if it does nothing.
-      .clickable { onClickHelper() }
+      .takeIf(showHelpers) { clickable { onClickHelper() } }
       .takeIf(selectionInfo.selectedElement == element) {
         background(Color.Red).padding(3.dp)
       },
-    onClickHelper = onClickHelper
-  )
+    propagateMinConstraints = true
+  ) {
+    element.Generate(
+      modifier = Modifier,
+      onClickHelper = onClickHelper
+    )
+  }
 }
 
 /**

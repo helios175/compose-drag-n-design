@@ -16,6 +16,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -177,8 +178,15 @@ abstract class Linear<ContainerScopeT> : Element {
 
   @Composable
   override fun Generate(modifier: Modifier) {
-    CreateContainer(modifier) {
-      Generate(modifier = Modifier.fillOtherDirection())
+    // Compose compiler doesn't realize we are using these values until much later inside the
+    // ContainerScopeT.Generate method where Row/Column() is already created.
+    // That means that if we don't key on our data, the Row/Column won't be recalculated when
+    // we add/change elements in it, and the cross-direction size might be miscalculated:
+    // adding a new item with a bigger height won't make a row taller.
+    key(elements, extendFrom, extendTo) {
+      CreateContainer(modifier) {
+        Generate(modifier = Modifier.fillOtherDirection())
+      }
     }
   }
 
