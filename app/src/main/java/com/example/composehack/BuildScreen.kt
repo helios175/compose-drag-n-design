@@ -41,7 +41,7 @@ class SelectionInfo {
   /**
    * What [Element] is selected or null.
    */
-  var selectedElement: Element? by mutableStateOf(null)
+  var selectedElement: Element<*>? by mutableStateOf(null)
 
   /**
    * Lambda to call if the [selectedElement] needs to be removed.
@@ -69,7 +69,7 @@ class SelectionInfo {
 @Preview
 @Composable
 fun BuildScreen() {
-  val mainElement: Element by remember { mutableStateOf(initialElement) }
+  var mainElement: Element<*> by remember { mutableStateOf(initialElement) }
   val selectionInfo = remember { SelectionInfo() }
   CompositionLocalProvider(LocalSelectionInfo provides selectionInfo) {
     DragContainer(modifier = Modifier.fillMaxSize()) {
@@ -118,9 +118,12 @@ fun BuildScreen() {
               modifier = Modifier
                 .fillMaxSize()
                 .background(Color.White)
-                .padding(20.dp)
+                .padding(20.dp),
+              propagateMinConstraints = true
             ) {
-              mainElement.Generate(modifier = Modifier)
+              mainElement.PlacedElement(
+                modifier = Modifier, onRemove = {}, onTransform = { mainElement = it }
+              )
             }
           }
         )
@@ -150,14 +153,14 @@ fun HorizontalSplit(
   }
 }
 
-val initialElement = Vertical()
+val initialElement = Vertical(listOf(), 0, 0)
 
 /**
  * The list of elements available to drag and drop.
  */
 private val elementsMenu = listOf(
-  MenuEntry("Horizontal", Color.LightGray) { Horizontal() },
-  MenuEntry("Vertical", Color.LightGray) { Vertical() },
+  MenuEntry("Horizontal", Color.LightGray) { Horizontal(listOf(), 0, 0) },
+  MenuEntry("Vertical", Color.LightGray) { Vertical(listOf(), 0, 0) },
   MenuEntry("Magenta", Color.Magenta) { BoxItem("Magenta", Color.Magenta) },
   MenuEntry("Yellow", Color.Yellow) { BoxItem("Yellow", Color.Yellow) },
   MenuEntry("Green", Color.Green) { BoxItem("Green", Color.Green) },
@@ -176,7 +179,7 @@ private val elementsMenu = listOf(
 private class MenuEntry(
   val text: String,
   val color: Color,
-  val elementProducer: () -> Element
+  val elementProducer: () -> Element<*>
 )
 
 @Composable
@@ -192,10 +195,19 @@ private fun RenderMenuEntry(menuEntry: MenuEntry) {
   }
 }
 
+typealias GenerateFunction<T> = @Composable (
+  modifier: Modifier,
+  element: T,
+  onClickHelper: () -> Unit,
+  onTransform: (Element<*>) -> Unit
+) -> Unit
+
 /**
  * Base interface for all the components definitions that can be dragged into the designer.
+ *
+ * @param T the self type, used to provide strong typing in composable methods.
  */
-interface Element {
+interface Element<T: Element<T>> {
 
   /** Name to be displayed in the properties box. */
   val name: String
@@ -209,17 +221,7 @@ interface Element {
    * If a container needs to use placeholders should call [PlaceHolder].
    * If a container needs to place children should call [PlacedElement].
    */
-  @Composable
-  fun Generate(modifier: Modifier): Unit = error("Override one of both generate methods")
-
-  /**
-   * Similar to the one-arg version but receives the code to execute when clicked.
-   * Override this version only if you are adding clickable stuff like a button and you need
-   * to pass a click handler. Most of the time you don't need to override this method.
-   */
-  @Composable
-  fun Generate(modifier: Modifier, onClickHelper: () -> Unit) =
-    Generate(modifier = modifier)
+  val Generate: GenerateFunction<T>
 
   /**
    * Prints the code for this component.
@@ -233,7 +235,7 @@ interface Element {
 fun PlaceHolder(
   modifier: Modifier,
   text: String,
-  onTransform: (Element) -> Unit
+  onTransform: (Element<*>) -> Unit
 ) {
   if (!LocalSelectionInfo.current.showHelpers) return
 
@@ -264,6 +266,11 @@ fun PreviewPlaceHolder() {
   }
 }
 
+@Composable
+fun <T : Element<T>> Element<T>.PlacedElement(modifier: Modifier, onRemove: () -> Unit, onTransform: (Element<*>) -> Unit) {
+  PlacedElement<T>(modifier, this, onRemove, onTransform)
+}
+
 /**
  * All container [Element]s should place their children using this method.
  * This method adds the decorations (selected border and show properties on click) when
@@ -272,7 +279,7 @@ fun PreviewPlaceHolder() {
  * @see BuildScreen
  */
 @Composable
-fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
+fun <T : Element<T>> PlacedElement(modifier: Modifier, element: Element<T>, onRemove: () -> Unit, onTransform: (Element<*>) -> Unit) {
   val selectionInfo = LocalSelectionInfo.current
   val onClickHelper: () -> Unit
   val showHelpers = selectionInfo.showHelpers
@@ -294,10 +301,7 @@ fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
       },
     propagateMinConstraints = true
   ) {
-    element.Generate(
-      modifier = Modifier,
-      onClickHelper = onClickHelper
-    )
+    element.Generate(modifier, element as T, onClickHelper, onTransform)
   }
 }
 
@@ -305,7 +309,7 @@ fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit) {
  * Prints the code output for the [mainElement] tree to the standard output.
  * @see CodeOutput
  */
-fun print(mainElement: Element) {
+fun print(mainElement: Element<*>) {
   CodeOutput().apply {
     mainElement.printTo("Modifier", this)
   }

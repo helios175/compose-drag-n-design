@@ -16,7 +16,6 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -33,7 +32,7 @@ class BoxItem(
   text: String,
   val color: Color,
   val textColor: Color = Color.Black
-) : Element {
+) : Element<BoxItem> {
 
   override val name: String get() = "BoxItem"
   var text by mutableStateOf(text)
@@ -45,15 +44,13 @@ class BoxItem(
     }
   }
 
-  @Composable
-  override fun Generate(modifier: Modifier) {
-    Box(
-      modifier = modifier.background(color),
-      propagateMinConstraints = true // we stretch content if we are stretched
-    ) {
-      Text(text, fontSize = 20.sp, color = textColor)
+  override val Generate: GenerateFunction<BoxItem>
+    get() = {
+        modifier: Modifier,
+        element: BoxItem,
+        _: () -> Unit,
+        _: (Element<*>) -> Unit -> GenerateBoxItem(modifier, element)
     }
-  }
 
   @ExperimentalUnsignedTypes
   override fun printTo(modifier: String, output: CodeOutput) {
@@ -69,24 +66,40 @@ class BoxItem(
   }
 }
 
+@Composable
+private fun GenerateBoxItem(
+  modifier: Modifier,
+  element: BoxItem,
+) {
+  Box(
+    modifier = modifier.background(element.color),
+    propagateMinConstraints = true // we stretch content if we are stretched
+  ) {
+    Text(element.text, fontSize = 20.sp, color = element.textColor)
+  }
+}
+
 @ExperimentalUnsignedTypes
 private fun Color.toCodeString() = "Color(0x${toArgb().toUInt().toString(16)})"
 
 /**
  * [Element] that produces a Material [Button].
  */
-class ButtonItem(initialText: String) : Element {
+class ButtonItem(initialText: String) : Element<ButtonItem> {
 
   var text by mutableStateOf(initialText)
 
   override val name get() = "Button"
 
-  @Composable
-  override fun Generate(modifier: Modifier, onClickHelper: () -> Unit) {
-    Button(modifier = modifier, onClick = onClickHelper) {
-      Text(text = text)
+  override val Generate: GenerateFunction<ButtonItem>
+    get() = { modifier: Modifier,
+      element: ButtonItem,
+      onClickHelper: () -> Unit,
+      _: (Element<*>) -> Unit ->
+      Button(modifier = modifier, onClick = onClickHelper) {
+        Text(text = element.text)
+      }
     }
-  }
 
   override fun printTo(modifier: String, output: CodeOutput) {
     output.println("""
@@ -108,7 +121,7 @@ class ButtonItem(initialText: String) : Element {
 /**
  * [Element] that produces a Material [TextField].
  */
-class TextFieldItem(initialText: String) : Element {
+class TextFieldItem(initialText: String) : Element<TextFieldItem> {
 
   var text: String by mutableStateOf(initialText)
 
@@ -121,15 +134,19 @@ class TextFieldItem(initialText: String) : Element {
     }
   }
 
-  @Composable
-  override fun Generate(modifier: Modifier, onClickHelper: () -> Unit) {
-    TextField(modifier = modifier
-      // Use the "onFocus" as a proxy for "I'm clicked"
-      .onFocusChanged { if (it.isFocused) onClickHelper() },
-      value = text,
-      onValueChange = { text = it },
-    )
-  }
+  override val Generate: GenerateFunction<TextFieldItem>
+    get() = {
+        modifier: Modifier,
+      element: TextFieldItem,
+      onClickHelper: () -> Unit,
+      _: (Element<*>) -> Unit ->
+      TextField(modifier = modifier
+        // Use the "onFocus" as a proxy for "I'm clicked"
+        .onFocusChanged { if (it.isFocused) onClickHelper() },
+        value = element.text,
+        onValueChange = { element.text = it },
+      )
+    }
 
   override fun printTo(modifier: String, output: CodeOutput) {
     output.println("""
@@ -143,14 +160,13 @@ class TextFieldItem(initialText: String) : Element {
  * The code to generate [Column] and [Row] is almost identical except for a few little pieces
  * that are solved through abstracts methods implemented on each concrete class.
  */
-abstract class Linear<ContainerScopeT> : Element {
-  var elements by mutableStateOf(listOf<Element>())
-  var extendFrom by mutableStateOf(0)
-  var extendTo by mutableStateOf(0)
+abstract class Linear<T : Linear<T>> : Element<T> {
+  abstract val elements: List<Element<*>>
+  abstract val extendFrom: Int
+  abstract val extendTo: Int
 
-  abstract fun Modifier.myDirectionMinSize(): Modifier
-  abstract fun Modifier.fillOtherDirection(): Modifier
-  abstract fun Modifier.weight1(scope: ContainerScopeT): Modifier
+  abstract fun copyMySelf(elements: List<Element<*>>, extendFrom: Int, extendTo: Int): T
+
   abstract fun codeForContainer(): String
   abstract fun codeForFillOtherDirection(): String
   abstract fun codeForMyDirectionMinSize(): String
@@ -172,79 +188,85 @@ abstract class Linear<ContainerScopeT> : Element {
       println("}")
     }
   }
+}
+
+@Composable
+fun <T: Linear<T>, ContainerScopeT> ContainerScopeT.GenerateLinearContent(
+  modifier: Modifier,
+  element: T,
+  //onClickHelper: () -> Unit,
+  onTransform: (Element<*>) -> Unit,
+  weight1: Modifier.() -> Modifier,
+  fillOtherDirection: Modifier.() -> Modifier,
+  myDirectionMinSize: Modifier.() -> Modifier,
+) {
 
   @Composable
-  abstract fun CreateContainer(modifier: Modifier, content: @Composable ContainerScopeT.() -> Unit)
-
-  @Composable
-  override fun Generate(modifier: Modifier) {
-    // Compose compiler doesn't realize we are using these values until much later inside the
-    // ContainerScopeT.Generate method where Row/Column() is already created.
-    // That means that if we don't key on our data, the Row/Column won't be recalculated when
-    // we add/change elements in it, and the cross-direction size might be miscalculated:
-    // adding a new item with a bigger height won't make a row taller.
-    key(elements, extendFrom, extendTo) {
-      CreateContainer(modifier) {
-        Generate(modifier = Modifier.fillOtherDirection())
-      }
+  fun placeHolder(
+    text: String,
+    index: Int,
+    extended: Boolean,
+    incrementExtendFrom: Boolean,
+    incrementExtendTo: Boolean
+  ) {
+    val childModifier = Modifier.fillOtherDirection()
+      .takeIf(extended) { weight1() }
+      .takeIf(!extended) { myDirectionMinSize() }
+    PlaceHolder(modifier = childModifier, text = text) { newElement ->
+      onTransform(
+        element.copyMySelf(
+        elements =element.elements.toMutableList().apply { add(index, newElement) },
+          extendFrom = if (incrementExtendFrom) { element.extendFrom+1 } else element.extendFrom,
+          extendTo = if (incrementExtendTo) { element.extendTo+1 } else element.extendTo
+        )
+      )
     }
   }
 
   @Composable
-  fun ContainerScopeT.Generate(modifier: Modifier) {
-
-    @Composable
-    fun placeHolder(
-      text: String,
-      index: Int,
-      extended: Boolean,
-      incrementExtendFrom: Boolean,
-      incrementExtendTo: Boolean
-    ) {
-      val childModifier = modifier
-        .takeIf(extended) { weight1(this@Generate) }
-        .takeIf(!extended) { myDirectionMinSize() }
-      PlaceHolder(modifier = childModifier, text = text) { newElement ->
-        elements = elements.toMutableList().apply { add(index, newElement) }
-        if (incrementExtendFrom) { extendFrom++ }
-        if (incrementExtendTo) { extendTo++ }
-      }
-    }
-
-    @Composable
-    fun placeElement(index: Int, extended: Boolean) {
-      val childModifier = modifier
-        .takeIf(extended) { weight1(this@Generate) }
-        .takeIf(!extended) { myDirectionMinSize() }
-      val top = index < extendFrom
-      val center = index in extendFrom until extendTo
-      PlacedElement(childModifier, elements[index], onRemove = {
-        elements = elements.toMutableList().apply { removeAt(index) }
-        if (top) extendFrom--
-        if (top || center) extendTo--
-      })
-    }
-
-    // Top
-    for (index in 0 until extendFrom) {
-      placeHolder("T", index = index, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
-      placeElement(index = index, extended = false)
-    }
-    // Center
-    placeHolder("T", index = extendFrom, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
-    if (extendFrom == extendTo) {
-      placeHolder("C", index = extendFrom, incrementExtendFrom = false, incrementExtendTo = true, extended = true)
-    } else {
-      placeElement(index = extendFrom, extended = true)
-    }
-    placeHolder("B", index = extendTo, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
-    // Bottom
-    for (index in extendTo until elements.size) {
-      placeElement(index = index, extended = false)
-      placeHolder("B", index = index + 1, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
-    }
+  fun placeElement(index: Int, extended: Boolean) {
+    val childModifier = Modifier.fillOtherDirection()
+      .takeIf(extended) { weight1() }
+      .takeIf(!extended) { myDirectionMinSize() }
+    val top = index < element.extendFrom
+    val center = index in element.extendFrom until element.extendTo
+    element.elements[index].PlacedElement(childModifier, onRemove = {
+      onTransform(
+        element.copyMySelf(
+          elements = element.elements.toMutableList().apply { removeAt(index) },
+          extendFrom = if (top) element.extendFrom-1 else element.extendFrom,
+          extendTo = if (top || center) element.extendTo-1 else element.extendTo
+        )
+      )
+    }, onTransform = { newElement ->
+      onTransform(
+        element.copyMySelf(
+          elements = element.elements.toMutableList().apply { this[index] = newElement },
+          extendFrom = element.extendFrom,
+          extendTo = element.extendTo
+        )
+      )
+    })
   }
 
+  // Top
+  for (index in 0 until element.extendFrom) {
+    placeHolder("T", index = index, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
+    placeElement(index = index, extended = false)
+  }
+  // Center
+  placeHolder("T", index = element.extendFrom, incrementExtendFrom = true, incrementExtendTo = true, extended = false)
+  if (element.extendFrom == element.extendTo) {
+    placeHolder("C", index = element.extendFrom, incrementExtendFrom = false, incrementExtendTo = true, extended = true)
+  } else {
+    placeElement(index = element.extendFrom, extended = true)
+  }
+  placeHolder("B", index = element.extendTo, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
+  // Bottom
+  for (index in element.extendTo until element.elements.size) {
+    placeElement(index = index, extended = false)
+    placeHolder("B", index = index + 1, incrementExtendFrom = false, incrementExtendTo = false, extended = false)
+  }
 }
 
 /**
@@ -252,18 +274,35 @@ abstract class Linear<ContainerScopeT> : Element {
  * See the [base class][Linear] for details on how its implemented.
  * [Vertical] only provides the specifics for the vertical case.
  */
-class Vertical : Linear<ColumnScope>() {
+class Vertical(
+  override val elements: List<Element<*>>,
+  override val extendFrom: Int,
+  override val extendTo: Int
+) : Linear<Vertical>() {
 
   override val name get() = "Vertical"
 
-  @Composable
-  override fun CreateContainer(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier = modifier, content = content)
+  override fun copyMySelf(elements: List<Element<*>>, extendFrom: Int, extendTo: Int): Vertical = Vertical(elements, extendFrom, extendTo)
+
+  override val Generate: GenerateFunction<Vertical>
+    get() = {
+        modifier: Modifier,
+        element: Vertical,
+        _: () -> Unit,
+        onTransform: (Element<*>) -> Unit ->
+      Column(modifier) {
+        val scope = this
+      GenerateLinearContent<Vertical, ColumnScope>(
+        modifier = modifier,
+        element = element,
+        onTransform= onTransform,
+        weight1 = { weight(1f) },
+        fillOtherDirection = { fillMaxWidth() },
+        myDirectionMinSize = { height(Min) }
+      )
+    }
   }
 
-  override fun Modifier.myDirectionMinSize() = height(Min)
-  override fun Modifier.fillOtherDirection() = fillMaxWidth()
-  override fun Modifier.weight1(scope: ColumnScope) = with(scope) { weight(1f) }
   override fun codeForContainer() = "Column"
   override fun codeForFillOtherDirection() = "fillMaxWidth()"
   override fun codeForMyDirectionMinSize() = "height(Min)"
@@ -274,18 +313,34 @@ class Vertical : Linear<ColumnScope>() {
  * See the [base class][Linear] for details on how its implemented.
  * [Horizontal] only provides the specifics for the vertical case.
  */
-class Horizontal: Linear<RowScope>() {
+data class Horizontal(
+  override val elements: List<Element<*>>,
+  override val extendFrom: Int,
+  override val extendTo: Int
+): Linear<Horizontal>() {
 
   override val name get() = "Horizontal"
 
-  @Composable
-  override fun CreateContainer(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
-    Row(modifier = modifier, content = content)
-  }
+  override fun copyMySelf(elements: List<Element<*>>, extendFrom: Int, extendTo: Int) = Horizontal(elements, extendFrom = extendFrom, extendTo = extendTo)
 
-  override fun Modifier.myDirectionMinSize() = width(Min)
-  override fun Modifier.fillOtherDirection() = fillMaxHeight()
-  override fun Modifier.weight1(scope: RowScope) = with(scope) { weight(1f) }
+  override val Generate: GenerateFunction<Horizontal>
+    get() = {
+        modifier: Modifier,
+        element: Horizontal,
+        _: () -> Unit,
+        onTransform: (Element<*>) -> Unit ->
+      Row(modifier) {
+        GenerateLinearContent<Horizontal, RowScope>(
+          modifier = modifier,
+          element = element,
+          onTransform= onTransform,
+          weight1 = { weight(1f) },
+          fillOtherDirection = { fillMaxHeight() },
+          myDirectionMinSize = { width(Min) }
+        )
+      }
+    }
+
   override fun codeForContainer() = "Row"
   override fun codeForFillOtherDirection() = "fillMaxHeight()"
   override fun codeForMyDirectionMinSize() = "width(Min)"
