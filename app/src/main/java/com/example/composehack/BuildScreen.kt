@@ -48,6 +48,8 @@ class SelectionInfo {
    */
   var onRemove: () -> Unit by mutableStateOf({})
 
+  var onTransform: (Element<*>) -> Unit by mutableStateOf({})
+
   /**
    * @return `true` if we should show helpers (placeholders, clickable elements and properties).
    * `false` if the design space should look as-in-production.
@@ -95,13 +97,27 @@ fun BuildScreen() {
         selectionInfo.selectedElement?.let { element ->
           Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(modifier = Modifier.weight(1f), text = "[${element.name}] properties:")
-            Button(onClick = selectionInfo.onRemove) {
+            Button(onClick = {
+              // onRemove will be updated when the UI is recomposed.
+              // Only when the X button is pressed go fetch it.
+              selectionInfo.onRemove()
+              selectionInfo.selectedElement = null
+            }) {
               Text("X")
             }
           }
-          element.Properties(modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.LightGray))
+          element.Properties(
+            modifier = Modifier
+              .fillMaxWidth()
+              .background(Color.LightGray),
+            onTransform = {
+              // onTransform will be updated when the UI is recomposed.
+              // Only when the properties transformation occur (after properties UI is rendered)
+              // go fetch it.
+              selectionInfo.onTransform(it)
+
+            }
+          )
         }
         HorizontalSplit(
           modifier = Modifier
@@ -214,7 +230,7 @@ interface Element<T: Element<T>> {
 
   /** Generates the UI for the properties box. Defaults to nothing. */
   @Composable
-  fun Properties(modifier: Modifier) = Unit
+  fun Properties(modifier: Modifier, onTransform: (T) -> Unit) = Unit
 
   /**
    * Generates the component visually.
@@ -283,11 +299,19 @@ fun <T : Element<T>> PlacedElement(modifier: Modifier, element: Element<T>, onRe
   val selectionInfo = LocalSelectionInfo.current
   val onClickHelper: () -> Unit
   val showHelpers = selectionInfo.showHelpers
-  if (showHelpers) {
-    onClickHelper = {
-      selectionInfo.selectedElement = element
-      selectionInfo.onRemove = onRemove
+  val onTrasformCheckingSelection: (Element<*>) -> Unit = { newElement ->
+    if (selectionInfo.selectedElement == element) {
+      selectionInfo.selectedElement = newElement
     }
+    onTransform(newElement)
+  }
+  if (element == selectionInfo.selectedElement) {
+    // Update the selected element actions for when they are taken (after UI is updated)
+    selectionInfo.onTransform = onTrasformCheckingSelection
+    selectionInfo.onRemove = onRemove
+  }
+  if (showHelpers) {
+    onClickHelper = { selectionInfo.selectedElement = element }
   } else {
     onClickHelper = {}
   }
@@ -301,7 +325,7 @@ fun <T : Element<T>> PlacedElement(modifier: Modifier, element: Element<T>, onRe
       },
     propagateMinConstraints = true
   ) {
-    element.Generate(modifier, element as T, onClickHelper, onTransform)
+    element.Generate(modifier, element as T, onClickHelper, onTrasformCheckingSelection)
   }
 }
 

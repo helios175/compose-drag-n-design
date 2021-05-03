@@ -15,9 +15,6 @@ import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.isFocused
 import androidx.compose.ui.focus.onFocusChanged
@@ -28,19 +25,20 @@ import androidx.compose.ui.unit.sp
 /**
  * Sample [Element] for a box with color and text.
  */
-class BoxItem(
-  text: String,
+data class BoxItem(
+  val text: String,
   val color: Color,
   val textColor: Color = Color.Black
 ) : Element<BoxItem> {
 
   override val name: String get() = "BoxItem"
-  var text by mutableStateOf(text)
 
   @Composable
-  override fun Properties(modifier: Modifier) {
+  override fun Properties(modifier: Modifier, onTransform: (BoxItem) -> Unit) {
     Column(modifier = modifier) {
-      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
+      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = {
+        onTransform(this@BoxItem.copy(text = it))
+      })
     }
   }
 
@@ -85,9 +83,9 @@ private fun Color.toCodeString() = "Color(0x${toArgb().toUInt().toString(16)})"
 /**
  * [Element] that produces a Material [Button].
  */
-class ButtonItem(initialText: String) : Element<ButtonItem> {
-
-  var text by mutableStateOf(initialText)
+data class ButtonItem(
+  val text: String
+  ) : Element<ButtonItem> {
 
   override val name get() = "Button"
 
@@ -111,9 +109,11 @@ class ButtonItem(initialText: String) : Element<ButtonItem> {
   }
 
   @Composable
-  override fun Properties(modifier: Modifier) {
+  override fun Properties(modifier: Modifier, onTransform: (ButtonItem) -> Unit) {
     Column(modifier = modifier) {
-      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
+      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = {
+        onTransform(this@ButtonItem.copy(text = it))
+      })
     }
   }
 }
@@ -121,16 +121,18 @@ class ButtonItem(initialText: String) : Element<ButtonItem> {
 /**
  * [Element] that produces a Material [TextField].
  */
-class TextFieldItem(initialText: String) : Element<TextFieldItem> {
-
-  var text: String by mutableStateOf(initialText)
+data class TextFieldItem(
+  val text: String
+  ) : Element<TextFieldItem> {
 
   override val name get() = "TextField"
 
   @Composable
-  override fun Properties(modifier: Modifier) {
+  override fun Properties(modifier: Modifier, onTransform: (TextFieldItem) -> Unit) {
     Column(modifier = modifier) {
-      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = { text = it })
+      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = {
+        onTransform(this@TextFieldItem.copy(text = it))
+      })
     }
   }
 
@@ -139,12 +141,14 @@ class TextFieldItem(initialText: String) : Element<TextFieldItem> {
         modifier: Modifier,
       element: TextFieldItem,
       onClickHelper: () -> Unit,
-      _: (Element<*>) -> Unit ->
+      onTransform: (Element<*>) -> Unit ->
       TextField(modifier = modifier
         // Use the "onFocus" as a proxy for "I'm clicked"
         .onFocusChanged { if (it.isFocused) onClickHelper() },
         value = element.text,
-        onValueChange = { element.text = it },
+        onValueChange = {
+          onTransform(this@TextFieldItem.copy(text = it))
+        },
       )
     }
 
@@ -191,10 +195,8 @@ abstract class Linear<T : Linear<T>> : Element<T> {
 }
 
 @Composable
-fun <T: Linear<T>, ContainerScopeT> ContainerScopeT.GenerateLinearContent(
-  modifier: Modifier,
+fun <T: Linear<T>> GenerateLinearContent(
   element: T,
-  //onClickHelper: () -> Unit,
   onTransform: (Element<*>) -> Unit,
   weight1: Modifier.() -> Modifier,
   fillOtherDirection: Modifier.() -> Modifier,
@@ -291,9 +293,7 @@ class Vertical(
         _: () -> Unit,
         onTransform: (Element<*>) -> Unit ->
       Column(modifier) {
-        val scope = this
-      GenerateLinearContent<Vertical, ColumnScope>(
-        modifier = modifier,
+      GenerateLinearContent<Vertical>(
         element = element,
         onTransform= onTransform,
         weight1 = { weight(1f) },
@@ -330,8 +330,7 @@ data class Horizontal(
         _: () -> Unit,
         onTransform: (Element<*>) -> Unit ->
       Row(modifier) {
-        GenerateLinearContent<Horizontal, RowScope>(
-          modifier = modifier,
+        GenerateLinearContent<Horizontal>(
           element = element,
           onTransform= onTransform,
           weight1 = { weight(1f) },
