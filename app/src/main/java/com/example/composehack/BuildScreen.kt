@@ -41,14 +41,14 @@ class SelectionInfo {
   /**
    * What [Element] is selected or null.
    */
-  var selectedElement: Element<*>? by mutableStateOf(null)
+  var selectedElement: Element? by mutableStateOf(null)
 
   /**
    * Lambda to call if the [selectedElement] needs to be removed.
    */
   var onRemove: () -> Unit by mutableStateOf({})
 
-  var onTransform: (Element<*>) -> Unit by mutableStateOf({})
+  var onTransform: (Element) -> Unit by mutableStateOf({})
 
   /**
    * @return `true` if we should show helpers (placeholders, clickable elements and properties).
@@ -71,7 +71,7 @@ class SelectionInfo {
 @Preview
 @Composable
 fun BuildScreen() {
-  var mainElement: Element<*> by remember { mutableStateOf(initialElement) }
+  var mainElement: Element by remember { mutableStateOf(initialElement) }
   val selectionInfo = remember { SelectionInfo() }
   CompositionLocalProvider(LocalSelectionInfo provides selectionInfo) {
     DragContainer(modifier = Modifier.fillMaxSize()) {
@@ -106,17 +106,7 @@ fun BuildScreen() {
               Text("X")
             }
           }
-          element.Properties(
-            modifier = Modifier
-              .fillMaxWidth()
-              .background(Color.LightGray),
-            onTransform = {
-              // onTransform will be updated when the UI is recomposed.
-              // Only when the properties transformation occur (after properties UI is rendered)
-              // go fetch it.
-              selectionInfo.onTransform(it)
-            }
-          )
+          RenderProperties(element, selectionInfo)
         }
         HorizontalSplit(
           modifier = Modifier
@@ -145,6 +135,23 @@ fun BuildScreen() {
       }
     }
   }
+}
+
+@Composable
+fun <T : Element> RenderProperties(element: T, selectionInfo: SelectionInfo) {
+  val renderer = Renderers.rendererFor(element)
+  renderer.Properties(
+    modifier = Modifier
+      .fillMaxWidth()
+      .background(Color.LightGray),
+    element = element,
+    onTransform = {
+      // onTransform will be updated when the UI is recomposed.
+      // Only when the properties transformation occur (after properties UI is rendered)
+      // go fetch it.
+      selectionInfo.onTransform(it)
+    }
+  )
 }
 
 /**
@@ -194,7 +201,7 @@ private val elementsMenu = listOf(
 private class MenuEntry(
   val text: String,
   val color: Color,
-  val elementProducer: () -> Element<*>
+  val elementProducer: () -> Element
 )
 
 @Composable
@@ -210,47 +217,20 @@ private fun RenderMenuEntry(menuEntry: MenuEntry) {
   }
 }
 
-typealias GenerateFunction<T> = @Composable (
-  modifier: Modifier,
-  element: T,
-  onClickHelper: () -> Unit,
-  onTransform: (Element<*>) -> Unit
-) -> Unit
-
 /**
  * Base interface for all the components definitions that can be dragged into the designer.
- *
- * @param T the self type, used to provide strong typing in composable methods.
  */
-interface Element<T: Element<T>> {
+interface Element {
 
   /** Name to be displayed in the properties box. */
   val name: String
-
-  /** Generates the UI for the properties box. Defaults to nothing. */
-  @Composable
-  fun Properties(modifier: Modifier, onTransform: (T) -> Unit) = Unit
-
-  /**
-   * Generates the component visually.
-   * If a container needs to use placeholders should call [PlaceHolder].
-   * If a container needs to place children should call [PlacedElement].
-   */
-  val Generate: GenerateFunction<T>
-
-  /**
-   * Prints the code for this component.
-   * @param modifier the modifier value to use after `modifier = `.
-   * @param output the [CodeOutput] to print to.
-   */
-  fun printTo(modifier: String, output: CodeOutput)
 }
 
 @Composable
 fun PlaceHolder(
   modifier: Modifier,
   text: String,
-  onTransform: (Element<*>) -> Unit
+  onTransform: (Element) -> Unit
 ) {
   if (!LocalSelectionInfo.current.showHelpers) return
 
@@ -289,11 +269,11 @@ fun PreviewPlaceHolder() {
  * @see BuildScreen
  */
 @Composable
-fun <T : Element<T>> PlacedElement(modifier: Modifier, element: Element<T>, onRemove: () -> Unit, onTransform: (Element<*>) -> Unit) {
+fun PlacedElement(modifier: Modifier, element: Element, onRemove: () -> Unit, onTransform: (Element) -> Unit) {
   val selectionInfo = LocalSelectionInfo.current
   val onClickHelper: () -> Unit
   val showHelpers = selectionInfo.showHelpers
-  val onTransformCheckingSelection: (Element<*>) -> Unit = { newElement ->
+  val onTransformCheckingSelection: (Element) -> Unit = { newElement ->
     if (selectionInfo.selectedElement == element) {
       selectionInfo.selectedElement = newElement
     }
@@ -319,7 +299,8 @@ fun <T : Element<T>> PlacedElement(modifier: Modifier, element: Element<T>, onRe
       },
     propagateMinConstraints = true
   ) {
-    element.Generate(modifier, element as T, onClickHelper, onTransformCheckingSelection)
+    val renderer = Renderers.rendererFor(element)
+    renderer.Generate(modifier, element, onClickHelper, onTransformCheckingSelection)
   }
 }
 
@@ -327,9 +308,9 @@ fun <T : Element<T>> PlacedElement(modifier: Modifier, element: Element<T>, onRe
  * Prints the code output for the [mainElement] tree to the standard output.
  * @see CodeOutput
  */
-fun print(mainElement: Element<*>) {
+fun print(mainElement: Element) {
   CodeOutput().apply {
-    mainElement.printTo("Modifier", this)
+    println("Modifier", mainElement)
   }
     .toString()
     .split('\n')
@@ -337,7 +318,7 @@ fun print(mainElement: Element<*>) {
 }
 
 /**
- * Utility class to print source code. Used in [Element.printTo]. Helps with indentation.
+ * Utility class to print source code. Used in [Renderer.printTo]. Helps with indentation.
  */
 class CodeOutput {
   private val sb = StringBuilder()
@@ -382,7 +363,56 @@ class CodeOutput {
   }
 
   /**
+   * Convenience that knows how to get the proper renderer for an [Element] to print compositions.
+   */
+  fun println(modifier: String, element: Element) {
+    Renderers.rendererFor(element).printTo(modifier, element, this)
+  }
+
+  /**
    * @return the generated code so far.
    */
   override fun toString() = sb.toString()
+}
+
+object Renderers {
+  private val map = mutableMapOf<Class<Element>, Renderer<*>>()
+
+  @Suppress("UNCHECKED_CAST")
+  fun <T : Element> rendererFor(element: T): Renderer<T> = map[element.javaClass] as Renderer<T>
+
+  init {
+    add(BoxItemRenderer)
+    add(ButtonRenderer)
+    add(TextFieldRenderer)
+    add(HorizontalRenderer)
+    add(VerticalRenderer)
+  }
+
+  private inline fun <reified T : Element> add(renderer: Renderer<T>) {
+    @Suppress("UNCHECKED_CAST")
+    map.put(T::class.java as Class<Element>, renderer)
+  }
+}
+
+interface Renderer<T : Element> {
+  @Composable
+  fun Generate(
+    modifier: Modifier,
+    element: T,
+    clickHelper: () -> Unit,
+    onTransform: (Element) -> Unit
+  )
+
+  /** Generates the UI for the properties box. Defaults to nothing. */
+  @Composable
+  fun Properties(modifier: Modifier, element: T, onTransform: (T) -> Unit) = Unit
+
+
+  /**
+   * Prints the code for this component.
+   * @param modifier the modifier value to use after `modifier = `.
+   * @param output the [CodeOutput] to print to.
+   */
+  fun printTo(modifier: String, element: T, output: CodeOutput)
 }

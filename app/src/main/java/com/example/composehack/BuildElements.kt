@@ -3,10 +3,8 @@ package com.example.composehack
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize.Min
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,51 +27,47 @@ data class BoxItem(
   val text: String,
   val color: Color,
   val textColor: Color = Color.Black
-) : Element<BoxItem> {
+) : Element {
 
   override val name: String get() = "BoxItem"
+}
+
+object BoxItemRenderer : Renderer<BoxItem> {
 
   @Composable
-  override fun Properties(modifier: Modifier, onTransform: (BoxItem) -> Unit) {
+  override fun Properties(modifier: Modifier, element: BoxItem, onTransform: (BoxItem) -> Unit) {
     Column(modifier = modifier) {
-      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = {
-        onTransform(this@BoxItem.copy(text = it))
+      TextField(modifier = Modifier.fillMaxWidth(), value = element.text, onValueChange = {
+        onTransform(element.copy(text = it))
       })
     }
   }
 
-  override val Generate: GenerateFunction<BoxItem>
-    get() = {
-        modifier: Modifier,
-        element: BoxItem,
-        _: () -> Unit,
-        _: (Element<*>) -> Unit -> GenerateBoxItem(modifier, element)
+  @Composable
+  override fun Generate(
+    modifier: Modifier,
+    element: BoxItem,
+    clickHelper: () -> Unit,
+    onTransform: (Element) -> Unit
+  ) {
+    Box(
+      modifier = modifier.background(element.color),
+      propagateMinConstraints = true // we stretch content if we are stretched
+    ) {
+      Text(element.text, fontSize = 20.sp, color = element.textColor)
     }
-
+  }
   @ExperimentalUnsignedTypes
-  override fun printTo(modifier: String, output: CodeOutput) {
+  override fun printTo(modifier: String, element: BoxItem, output: CodeOutput) {
     output.println("""
     Box(
-      modifier = $modifier.background(${color.toCodeString()}}),
+      modifier = $modifier.background(${element.color.toCodeString()}}),
       propagateMinConstraints = true
     ) {
-      Text("$text", fontSize = 20.sp, color = ${color.toCodeString()})
+      Text("${element.text}", fontSize = 20.sp, color = ${element.color.toCodeString()})
     }
     """.trimIndent()
     )
-  }
-}
-
-@Composable
-private fun GenerateBoxItem(
-  modifier: Modifier,
-  element: BoxItem,
-) {
-  Box(
-    modifier = modifier.background(element.color),
-    propagateMinConstraints = true // we stretch content if we are stretched
-  ) {
-    Text(element.text, fontSize = 20.sp, color = element.textColor)
   }
 }
 
@@ -85,36 +79,41 @@ private fun Color.toCodeString() = "Color(0x${toArgb().toUInt().toString(16)})"
  */
 data class ButtonItem(
   val text: String
-  ) : Element<ButtonItem> {
+  ) : Element {
 
   override val name get() = "Button"
+  }
 
-  override val Generate: GenerateFunction<ButtonItem>
-    get() = { modifier: Modifier,
-      element: ButtonItem,
-      onClickHelper: () -> Unit,
-      _: (Element<*>) -> Unit ->
-      Button(modifier = modifier, onClick = onClickHelper) {
-        Text(text = element.text)
-      }
+object ButtonRenderer : Renderer<ButtonItem> {
+
+  @Composable
+  override fun Generate(
+    modifier: Modifier,
+    element: ButtonItem,
+    clickHelper: () -> Unit,
+    onTransform: (Element) -> Unit
+  ) {
+    Button(modifier = modifier, onClick = clickHelper) {
+      Text(text = element.text)
     }
-
-  override fun printTo(modifier: String, output: CodeOutput) {
-    output.println("""
-      Button(modifier = $modifier) {
-        Text(text = "$text")
-      }
-      """.trimIndent()
-    )
   }
 
   @Composable
-  override fun Properties(modifier: Modifier, onTransform: (ButtonItem) -> Unit) {
+  override fun Properties(modifier: Modifier, element: ButtonItem, onTransform: (ButtonItem) -> Unit) {
     Column(modifier = modifier) {
-      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = {
-        onTransform(this@ButtonItem.copy(text = it))
+      TextField(modifier = Modifier.fillMaxWidth(), value = element.text, onValueChange = {
+        onTransform(element.copy(text = it))
       })
     }
+  }
+
+  override fun printTo(modifier: String, element: ButtonItem, output: CodeOutput) {
+    output.println("""
+      Button(modifier = $modifier) {
+        Text(text = "${element.text}")
+      }
+      """.trimIndent()
+    )
   }
 }
 
@@ -123,38 +122,42 @@ data class ButtonItem(
  */
 data class TextFieldItem(
   val text: String
-  ) : Element<TextFieldItem> {
+  ) : Element {
 
   override val name get() = "TextField"
+  }
+
+object TextFieldRenderer : Renderer<TextFieldItem> {
 
   @Composable
-  override fun Properties(modifier: Modifier, onTransform: (TextFieldItem) -> Unit) {
+  override fun Properties(modifier: Modifier, element: TextFieldItem, onTransform: (TextFieldItem) -> Unit) {
     Column(modifier = modifier) {
-      TextField(modifier = Modifier.fillMaxWidth(), value = text, onValueChange = {
-        onTransform(this@TextFieldItem.copy(text = it))
+      TextField(modifier = Modifier.fillMaxWidth(), value = element.text, onValueChange = {
+        onTransform(element.copy(text = it))
       })
     }
   }
 
-  override val Generate: GenerateFunction<TextFieldItem>
-    get() = {
-        modifier: Modifier,
-      element: TextFieldItem,
-      onClickHelper: () -> Unit,
-      onTransform: (Element<*>) -> Unit ->
-      TextField(modifier = modifier
-        // Use the "onFocus" as a proxy for "I'm clicked"
-        .onFocusChanged { if (it.isFocused) onClickHelper() },
-        value = element.text,
-        onValueChange = {
-          onTransform(this@TextFieldItem.copy(text = it))
-        },
-      )
-    }
+  @Composable
+  override fun Generate(
+    modifier: Modifier,
+    element: TextFieldItem,
+    clickHelper: () -> Unit,
+    onTransform: (Element) -> Unit
+  ) {
+    TextField(modifier = modifier
+      // Use the "onFocus" as a proxy for "I'm clicked"
+      .onFocusChanged { if (it.isFocused) clickHelper() },
+      value = element.text,
+      onValueChange = {
+        onTransform(element.copy(text = it))
+      },
+    )
+  }
 
-  override fun printTo(modifier: String, output: CodeOutput) {
+  override fun printTo(modifier: String, element: TextFieldItem, output: CodeOutput) {
     output.println("""
-      TextField(modifier = $modifier, value = "$text", onValueChange = {...})
+      TextField(modifier = $modifier, value = "${element.text}", onValueChange = {...})
     """.trimIndent())
   }
 }
@@ -164,40 +167,18 @@ data class TextFieldItem(
  * The code to generate [Column] and [Row] is almost identical except for a few little pieces
  * that are solved through abstracts methods implemented on each concrete class.
  */
-abstract class Linear<T : Linear<T>> : Element<T> {
-  abstract val elements: List<Element<*>>
+abstract class Linear<T : Linear<T>> : Element {
+  abstract val elements: List<Element>
   abstract val extendFrom: Int
   abstract val extendTo: Int
 
-  abstract fun copyMySelf(elements: List<Element<*>>, extendFrom: Int, extendTo: Int): T
-
-  abstract fun codeForContainer(): String
-  abstract fun codeForFillOtherDirection(): String
-  abstract fun codeForMyDirectionMinSize(): String
-
-  override fun printTo(modifier: String, output: CodeOutput) {
-    val container = codeForContainer()
-    val fillOtherDirection = codeForFillOtherDirection()
-    val myDirectionMinSize = codeForMyDirectionMinSize()
-    val weight1 = "weight(1f)"
-    with (output) {
-      println("$container(Modifier.$fillOtherDirection) {")
-      indent {
-        elements.forEachIndexed { index, element ->
-          val extended = index in extendFrom until extendTo
-          val childModifier = "Modifier.${if (extended) weight1 else myDirectionMinSize}"
-          element.printTo(childModifier, this)
-        }
-      }
-      println("}")
-    }
-  }
+  abstract fun copyMySelf(elements: List<Element>, extendFrom: Int, extendTo: Int): T
 }
 
 @Composable
 fun <T: Linear<T>> GenerateLinearContent(
   element: T,
-  onTransform: (Element<*>) -> Unit,
+  onTransform: (Element) -> Unit,
   weight1: Modifier.() -> Modifier,
   fillOtherDirection: Modifier.() -> Modifier,
   myDirectionMinSize: Modifier.() -> Modifier,
@@ -211,7 +192,8 @@ fun <T: Linear<T>> GenerateLinearContent(
     incrementExtendFrom: Boolean,
     incrementExtendTo: Boolean
   ) {
-    val childModifier = Modifier.fillOtherDirection()
+    val childModifier = Modifier
+      .fillOtherDirection()
       .takeIf(extended) { weight1() }
       .takeIf(!extended) { myDirectionMinSize() }
     PlaceHolder(modifier = childModifier, text = text) { newElement ->
@@ -227,7 +209,8 @@ fun <T: Linear<T>> GenerateLinearContent(
 
   @Composable
   fun placeElement(index: Int, extended: Boolean) {
-    val childModifier = Modifier.fillOtherDirection()
+    val childModifier = Modifier
+      .fillOtherDirection()
       .takeIf(extended) { weight1() }
       .takeIf(!extended) { myDirectionMinSize() }
     val top = index < element.extendFrom
@@ -273,31 +256,57 @@ fun <T: Linear<T>> GenerateLinearContent(
   }
 }
 
+fun linearPrintTo(
+  element: Linear<*>,
+  codeForContainer: String,
+  codeForFillOtherDirection: String,
+  codeForMyDirectionMinSize: String,
+  output: CodeOutput
+) {
+
+  val weight1 = "weight(1f)"
+  with (output) {
+    println("$codeForContainer(Modifier.$codeForFillOtherDirection) {")
+    indent {
+      element.elements.forEachIndexed { index, child ->
+        val extended = index in element.extendFrom until element.extendTo
+        val childModifier = "Modifier.${if (extended) weight1 else codeForMyDirectionMinSize}"
+        println(childModifier, child)
+      }
+    }
+    println("}")
+  }
+}
+
 /**
  * [Element] that produces a [Column].
  * See the [base class][Linear] for details on how its implemented.
  * [Vertical] only provides the specifics for the vertical case.
  */
 class Vertical(
-  override val elements: List<Element<*>>,
+  override val elements: List<Element>,
   override val extendFrom: Int,
   override val extendTo: Int
 ) : Linear<Vertical>() {
 
   override val name get() = "Vertical"
 
-  override fun copyMySelf(elements: List<Element<*>>, extendFrom: Int, extendTo: Int): Vertical = Vertical(elements, extendFrom, extendTo)
+  override fun copyMySelf(elements: List<Element>, extendFrom: Int, extendTo: Int): Vertical = Vertical(elements, extendFrom, extendTo)
+}
 
-  override val Generate: GenerateFunction<Vertical>
-    get() = {
-        modifier: Modifier,
-        element: Vertical,
-        _: () -> Unit,
-        onTransform: (Element<*>) -> Unit ->
-      Column(modifier) {
-      GenerateLinearContent<Vertical>(
+object VerticalRenderer : Renderer<Vertical> {
+
+  @Composable
+  override fun Generate(
+    modifier: Modifier,
+    element: Vertical,
+    clickHelper: () -> Unit,
+    onTransform: (Element) -> Unit
+  ) {
+    Column(modifier) {
+      GenerateLinearContent(
         element = element,
-        onTransform= onTransform,
+        onTransform = onTransform,
         weight1 = { weight(1f) },
         fillOtherDirection = { fillMaxWidth() },
         myDirectionMinSize = { height(Min) }
@@ -305,9 +314,15 @@ class Vertical(
     }
   }
 
-  override fun codeForContainer() = "Column"
-  override fun codeForFillOtherDirection() = "fillMaxWidth()"
-  override fun codeForMyDirectionMinSize() = "height(Min)"
+  override fun printTo(modifier: String, element: Vertical, output: CodeOutput) {
+    linearPrintTo(
+      element,
+      codeForContainer = "Column",
+      codeForFillOtherDirection = "fillMaxWidth()",
+      codeForMyDirectionMinSize = "height(Min)",
+      output
+    )
+  }
 }
 
 /**
@@ -316,33 +331,43 @@ class Vertical(
  * [Horizontal] only provides the specifics for the vertical case.
  */
 data class Horizontal(
-  override val elements: List<Element<*>>,
+  override val elements: List<Element>,
   override val extendFrom: Int,
   override val extendTo: Int
 ): Linear<Horizontal>() {
 
   override val name get() = "Horizontal"
 
-  override fun copyMySelf(elements: List<Element<*>>, extendFrom: Int, extendTo: Int) = Horizontal(elements, extendFrom = extendFrom, extendTo = extendTo)
+  override fun copyMySelf(elements: List<Element>, extendFrom: Int, extendTo: Int) = Horizontal(elements, extendFrom = extendFrom, extendTo = extendTo)
+}
 
-  override val Generate: GenerateFunction<Horizontal>
-    get() = {
-        modifier: Modifier,
-        element: Horizontal,
-        _: () -> Unit,
-        onTransform: (Element<*>) -> Unit ->
-      Row(modifier) {
-        GenerateLinearContent<Horizontal>(
-          element = element,
-          onTransform= onTransform,
-          weight1 = { weight(1f) },
-          fillOtherDirection = { fillMaxHeight() },
-          myDirectionMinSize = { width(Min) }
-        )
-      }
+object HorizontalRenderer : Renderer<Horizontal> {
+
+  @Composable
+  override fun Generate(
+    modifier: Modifier,
+    element: Horizontal,
+    clickHelper: () -> Unit,
+    onTransform: (Element) -> Unit
+  ) {
+    Row(modifier) {
+      GenerateLinearContent<Horizontal>(
+        element = element,
+        onTransform= onTransform,
+        weight1 = { weight(1f) },
+        fillOtherDirection = { fillMaxHeight() },
+        myDirectionMinSize = { width(Min) }
+      )
     }
+  }
 
-  override fun codeForContainer() = "Row"
-  override fun codeForFillOtherDirection() = "fillMaxHeight()"
-  override fun codeForMyDirectionMinSize() = "width(Min)"
+  override fun printTo(modifier: String, element: Horizontal, output: CodeOutput) {
+    linearPrintTo(
+      element,
+      codeForContainer = "Row",
+      codeForFillOtherDirection = "fillMaxHeight()",
+      codeForMyDirectionMinSize = "width(Min)",
+      output = output
+    )
+  }
 }
