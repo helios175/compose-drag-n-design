@@ -115,7 +115,6 @@ fun BuildScreen() {
               // Only when the properties transformation occur (after properties UI is rendered)
               // go fetch it.
               selectionInfo.onTransform(it)
-
             }
           )
         }
@@ -137,8 +136,8 @@ fun BuildScreen() {
                 .padding(20.dp),
               propagateMinConstraints = true
             ) {
-              mainElement.PlacedElement(
-                modifier = Modifier, onRemove = {}, onTransform = { mainElement = it }
+              PlacedElement(
+                modifier = Modifier, mainElement, onRemove = {}, onTransform = { mainElement = it }
               )
             }
           }
@@ -282,11 +281,6 @@ fun PreviewPlaceHolder() {
   }
 }
 
-@Composable
-fun <T : Element<T>> Element<T>.PlacedElement(modifier: Modifier, onRemove: () -> Unit, onTransform: (Element<*>) -> Unit) {
-  PlacedElement<T>(modifier, this, onRemove, onTransform)
-}
-
 /**
  * All container [Element]s should place their children using this method.
  * This method adds the decorations (selected border and show properties on click) when
@@ -299,15 +293,15 @@ fun <T : Element<T>> PlacedElement(modifier: Modifier, element: Element<T>, onRe
   val selectionInfo = LocalSelectionInfo.current
   val onClickHelper: () -> Unit
   val showHelpers = selectionInfo.showHelpers
-  val onTrasformCheckingSelection: (Element<*>) -> Unit = { newElement ->
+  val onTransformCheckingSelection: (Element<*>) -> Unit = { newElement ->
     if (selectionInfo.selectedElement == element) {
       selectionInfo.selectedElement = newElement
     }
     onTransform(newElement)
   }
   if (element == selectionInfo.selectedElement) {
-    // Update the selected element actions for when they are taken (after UI is updated)
-    selectionInfo.onTransform = onTrasformCheckingSelection
+    // Update the selected element actions for when they are taken (happens after UI is updated)
+    selectionInfo.onTransform = onTransformCheckingSelection
     selectionInfo.onRemove = onRemove
   }
   if (showHelpers) {
@@ -325,7 +319,7 @@ fun <T : Element<T>> PlacedElement(modifier: Modifier, element: Element<T>, onRe
       },
     propagateMinConstraints = true
   ) {
-    element.Generate(modifier, element as T, onClickHelper, onTrasformCheckingSelection)
+    element.Generate(modifier, element as T, onClickHelper, onTransformCheckingSelection)
   }
 }
 

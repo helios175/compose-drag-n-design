@@ -232,7 +232,9 @@ fun <T: Linear<T>> GenerateLinearContent(
       .takeIf(!extended) { myDirectionMinSize() }
     val top = index < element.extendFrom
     val center = index in element.extendFrom until element.extendTo
-    element.elements[index].PlacedElement(childModifier, onRemove = {
+    PlacedElement(childModifier,
+      element = element.elements[index],
+      onRemove = {
       onTransform(
         element.copyMySelf(
           elements = element.elements.toMutableList().apply { removeAt(index) },
